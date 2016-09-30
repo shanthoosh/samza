@@ -29,6 +29,8 @@ object StorageConfig {
   val KEY_SERDE = "stores.%s.key.serde"
   val MSG_SERDE = "stores.%s.msg.serde"
   val CHANGELOG_STREAM = "stores.%s.changelog"
+  val CHANGE_LOG_DELETION_RETENTION_MS="stores.%s.changelog.deletion.retention.ms"
+  val DEFAULT_CHANGE_LOG_DELETION_RETENTION_MS=86400000L
 
   implicit def Config2Storage(config: Config) = new StorageConfig(config)
 }
@@ -39,6 +41,10 @@ class StorageConfig(config: Config) extends ScalaMapConfig(config) with Logging 
   def getStorageKeySerde(name: String) = getOption(StorageConfig.KEY_SERDE format name)
   def getStorageMsgSerde(name: String) = getOption(StorageConfig.MSG_SERDE format name)
   def getChangelogStream(name: String) = getOption(CHANGELOG_STREAM format name)
+  def getChangeLogDeletionRetentionInMs(name: String) = {
+    getLong(CHANGE_LOG_DELETION_RETENTION_MS format name, DEFAULT_CHANGE_LOG_DELETION_RETENTION_MS)
+  }
+
   def getStoreNames: Seq[String] = {
     val conf = config.subset("stores.", true)
     conf.keys.filter(k => k.endsWith(".factory")).map(k => k.substring(0, k.length - ".factory".length)).toSeq

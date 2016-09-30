@@ -27,6 +27,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.lang.Thread.UncaughtExceptionHandler
 import java.net.{URL, UnknownHostException}
+
 import org.apache.samza.SamzaException
 import org.apache.samza.checkpoint.CheckpointManagerFactory
 import org.apache.samza.checkpoint.OffsetManager
@@ -34,7 +35,7 @@ import org.apache.samza.checkpoint.OffsetManagerMetrics
 import org.apache.samza.config.JobConfig.Config2Job
 import org.apache.samza.config.MetricsConfig.Config2Metrics
 import org.apache.samza.config.SerializerConfig.Config2Serializer
-import org.apache.samza.config.ShellCommandConfig
+import org.apache.samza.config.{ShellCommandConfig, StorageConfig}
 import org.apache.samza.config.StorageConfig.Config2Storage
 import org.apache.samza.config.StreamConfig.Config2Stream
 import org.apache.samza.config.SystemConfig.Config2System
@@ -44,7 +45,7 @@ import org.apache.samza.container.disk.DiskSpaceMonitor
 import org.apache.samza.container.disk.DiskSpaceMonitor.Listener
 import org.apache.samza.container.disk.NoThrottlingDiskQuotaPolicyFactory
 import org.apache.samza.container.disk.PollingScanDiskSpaceMonitor
-import org.apache.samza.container.host.{SystemMemoryStatistics, SystemStatisticsMonitor, StatisticsMonitorImpl}
+import org.apache.samza.container.host.{StatisticsMonitorImpl, SystemMemoryStatistics, SystemStatisticsMonitor}
 import org.apache.samza.coordinator.stream.CoordinatorStreamSystemFactory
 import org.apache.samza.job.model.ContainerModel
 import org.apache.samza.job.model.JobModel
@@ -135,6 +136,13 @@ object SamzaContainer extends Logging {
           url = new URL(url),
           retryBackoff = new ExponentialSleepStrategy(initialDelayMs = initialDelayMs)),
         classOf[JobModel])
+  }
+
+  def getChangeLogDeleteRetentions(config: StorageConfig) = {
+    config.getStoreNames
+          .filter(config.getChangelogStream(_).isDefined)
+          .map(name => (name, config.getChangeLogDeletionRetentionInMs(name)))
+          .toMap
   }
 
   def apply(containerModel: ContainerModel, jobModel: JobModel, jmxServer: JmxServer) = {
@@ -517,6 +525,9 @@ object SamzaContainer extends Logging {
 
       info("Got task stores: %s" format taskStores)
 
+      val changeLogDeleteRetentions = getChangeLogDeleteRetentions(new StorageConfig(config))
+      debug("Got change log retention for stores: %s " format changeLogDeleteRetentions)
+
       val storageManager = new TaskStorageManager(
         taskName = taskName,
         taskStores = taskStores,
@@ -527,7 +538,8 @@ object SamzaContainer extends Logging {
         storeBaseDir = defaultStoreBaseDir,
         loggedStoreBaseDir = loggedStorageBaseDir,
         partition = taskModel.getChangelogPartition,
-        systemAdmins = systemAdmins)
+        systemAdmins = systemAdmins,
+        changeLogDeletionRetentions = changeLogDeleteRetentions)
 
       val systemStreamPartitions = taskModel
         .getSystemStreamPartitions

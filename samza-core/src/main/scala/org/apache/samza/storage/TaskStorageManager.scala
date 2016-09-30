@@ -22,10 +22,11 @@ package org.apache.samza.storage
 import java.io._
 import java.util
 
+import org.apache.samza.config.StorageConfig._
 import org.apache.samza.{Partition, SamzaException}
 import org.apache.samza.container.TaskName
 import org.apache.samza.system._
-import org.apache.samza.util.{Logging, Util}
+import org.apache.samza.util.{Logging, SystemClock, Util}
 
 import scala.collection.{JavaConversions, Map}
 
@@ -53,7 +54,8 @@ class TaskStorageManager(
   storeBaseDir: File = new File(System.getProperty("user.dir"), "state"),
   loggedStoreBaseDir: File = new File(System.getProperty("user.dir"), "state"),
   partition: Partition,
-  systemAdmins: Map[String, SystemAdmin]) extends Logging {
+  systemAdmins: Map[String, SystemAdmin],
+  changeLogDeletionRetentions: Map[String, Long] = Map()) extends Logging {
 
   var taskStoresToRestore = taskStores.filter{
     case (storeName, storageEngine) => storageEngine.getStoreProperties.isLoggedStore
@@ -65,6 +67,7 @@ class TaskStorageManager(
   var changeLogOldestOffsets: Map[SystemStream, String] = Map()
   val fileOffset: util.Map[SystemStreamPartition, String] = new util.HashMap[SystemStreamPartition, String]()
   val offsetFileName = "OFFSET"
+  val clock = SystemClock.instance
 
   def apply(storageEngineName: String) = taskStores(storageEngineName)
 
@@ -91,12 +94,37 @@ class TaskStorageManager(
 
       val loggedStoragePartitionDir = TaskStorageManager.getStorePartitionDir(loggedStoreBaseDir, storeName, taskName)
       info("Got logged storage partition directory as %s" format loggedStoragePartitionDir.toPath.toString)
-      // If we find valid offsets s.t. we can restore the state, keep the disk files. Otherwise, delete them.
-      if (!persistedStores.contains(storeName) ||
-        (loggedStoragePartitionDir.exists() && !readOffsetFile(storeName, loggedStoragePartitionDir))) {
+      // Delete the store if it is either stale or not part of the persisted stores.
+      if (!persistedStores.contains(storeName) || isStaleLoggedPartitionDir(loggedStoragePartitionDir, storeName)) {
         Util.rm(loggedStoragePartitionDir)
       }
     })
+  }
+
+  /**
+    *
+    * @param loggedStoragePartitionDir the base directory of the local store.
+    * @param storeName the name of the store.
+    * @return true if the store has gone to a stale state. A store is stale if any of the following conditions is true.
+    *         a) Offset file is not present in the store's directory.
+    *         b) ((CurrentTime) - (LastModifiedTime of the Offset file) is greater than the changelog's tombstone retention).
+    */
+  private def isStaleLoggedPartitionDir(loggedStoragePartitionDir: File, storeName: String) : Boolean = {
+    if (loggedStoragePartitionDir.exists()) {
+      val changeLogDeleteRetentionMs = changeLogDeletionRetentions.get(storeName) match {
+        case Some(deleteRetentionMs) => deleteRetentionMs
+        case _ => DEFAULT_CHANGE_LOG_DELETION_RETENTION_MS
+      }
+      val (isOffsetFilePresent, lastModifiedTimeOfOffsetFile) = getOffsetFileProperties(storeName, loggedStoragePartitionDir)
+      if (!isOffsetFilePresent) {
+        info ("Offset file is not present for the store %s" format(loggedStoragePartitionDir))
+        return true
+      } else if ((clock.currentTimeMillis - lastModifiedTimeOfOffsetFile) >= changeLogDeleteRetentionMs) {
+        info ("Last modified time of the offset file in store %s is older than deleteRetentionMs" format(loggedStoragePartitionDir))
+        return true
+      }
+    }
+    false
   }
 
   private def setupBaseDirs() {
@@ -113,26 +141,30 @@ class TaskStorageManager(
   }
 
   /**
-    * Attempts to read the offset file and returns {@code true} if the offsets were read successfully.
-    *
-    * @param storeName                  the name of the store for which the offsets are needed
-    * @param loggedStoragePartitionDir  the directory for the store
-    * @return                           true if the offsets were read successfully, false otherwise.
+    * Returns a tuple (isOffsetFilePresent, lastModifiedTimeOfOffsetFile) describing the
+    * properties of the offset file.
+    * First value of the tuple indicates if the offset file is present. Second
+    * value of the tuple indicates the last modified time of the offset file.
+    * @param storeName                  the name of the store
+    * @param loggedStoragePartitionDir  the base directory of the store
+    * @return                           a tuple (isOffsetFilePresent, lastModifiedTimeOfOffsetFile).
     */
-  private def readOffsetFile(storeName: String, loggedStoragePartitionDir: File): Boolean = {
-    var offsetsRead = false
+  private def getOffsetFileProperties(storeName: String, loggedStoragePartitionDir: File) = {
+    var isOffsetFilePresent = false
+    var lastModifiedTime = -1L
     val offsetFileRef = new File(loggedStoragePartitionDir, offsetFileName)
-    if(offsetFileRef.exists()) {
+    if (offsetFileRef.exists()) {
       debug("Found offset file in partition directory: %s" format offsetFileRef.toPath.toString)
       val offset = Util.readDataFromFile(offsetFileRef)
       if(offset != null && !offset.isEmpty) {
         fileOffset.put(new SystemStreamPartition(changeLogSystemStreams(storeName), partition), offset)
-        offsetsRead = true
+        isOffsetFilePresent = true
+        lastModifiedTime = offsetFileRef.lastModified()
       }
     } else {
       info("No offset file found in logged storage partition directory: %s" format loggedStoragePartitionDir.toPath.toString)
     }
-    offsetsRead
+    (isOffsetFilePresent, lastModifiedTime)
   }
 
   private def validateChangelogStreams() = {

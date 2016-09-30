@@ -30,6 +30,7 @@ import org.apache.samza.SamzaException;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JavaStorageConfig;
 import org.apache.samza.config.JavaSystemConfig;
+import org.apache.samza.config.StorageConfig;
 import org.apache.samza.container.SamzaContainerContext;
 import org.apache.samza.coordinator.JobModelManager;
 import org.apache.samza.job.model.ContainerModel;
@@ -49,6 +50,9 @@ import org.apache.samza.util.SystemClock;
 import org.apache.samza.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.samza.container.SamzaContainer.getChangeLogDeleteRetentions;
+
 
 /**
  * Recovers the state storages from the changelog streams and store the storages
@@ -238,7 +242,6 @@ public class StorageRecovery extends CommandLine {
             taskStores.put(storeName, storageEngine);
           }
         }
-
         TaskStorageManager taskStorageManager = new TaskStorageManager(
             taskModel.getTaskName(),
             Util.javaMapAsScalaMap(taskStores),
@@ -247,8 +250,10 @@ public class StorageRecovery extends CommandLine {
             maxPartitionNumber,
             streamMetadataCache,
             storeBaseDir,
-            storeBaseDir, taskModel.getChangelogPartition(),
-            Util.javaMapAsScalaMap(systemAdmins));
+            storeBaseDir,
+            taskModel.getChangelogPartition(),
+            Util.javaMapAsScalaMap(systemAdmins),
+            getChangeLogDeleteRetentions(new StorageConfig(jobConfig)));
 
         taskStorageManagers.add(taskStorageManager);
       }
