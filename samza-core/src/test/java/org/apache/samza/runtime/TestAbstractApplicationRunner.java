@@ -24,13 +24,13 @@ import org.apache.samza.config.Config;
 import org.apache.samza.config.JobConfig;
 import org.apache.samza.config.MapConfig;
 import org.apache.samza.config.StreamConfig;
-import org.apache.samza.operators.StreamGraphBuilder;
+import org.apache.samza.application.StreamApplication;
 import org.apache.samza.system.StreamSpec;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-public class TestAbstractExecutionEnvironment {
+public class TestAbstractApplicationRunner {
   private static final String STREAM_ID = "t3st-Stream_Id";
   private static final String STREAM_ID_INVALID = "test#Str3amId!";
 
@@ -326,7 +326,7 @@ public class TestAbstractExecutionEnvironment {
     }
 
     @Override
-    public void run(StreamGraphBuilder graphBuilder, Config config) {
+    public void run(StreamApplication streamApp) {
       // do nothing
     }
   }
