@@ -37,13 +37,13 @@ import static junit.framework.TestCase.assertTrue;
 
 public class TestLocalStoreMonitor {
 
-  private static File jobDir = new File(System.getProperty("java.io.tmpdir"),
+  private static File jobDir = new File(System.getProperty("java.io.tmpdir") + File.separator + "samza-test-job/",
                                         "test-jobName-jobId");
 
   private File taskStoreDir = new File(new File(jobDir, "test-store"), "test-task");
 
   private Map<String, String> config = ImmutableMap.of(LocalStoreMonitorConfig.CONFIG_LOCAL_STORE_DIR,
-                                                       System.getProperty("java.io.tmpdir"));
+                                                       System.getProperty("java.io.tmpdir") + File.separator + "samza-test-job/");
 
   private LocalStoreMonitor localStoreMonitor;
 

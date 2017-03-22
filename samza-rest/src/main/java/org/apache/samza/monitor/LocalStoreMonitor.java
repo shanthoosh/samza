@@ -81,6 +81,8 @@ public class LocalStoreMonitor implements Monitor {
     for (JobInstance jobInstance : getHostAffinityEnabledJobs(localStoreDir)) {
       File jobDir = new File(localStoreDir,
                              String.format("%s-%s", jobInstance.getJobName(), jobInstance.getJobId()));
+      Preconditions.checkState(jobDir.exists(), "JobDir is null");
+      Preconditions.checkNotNull(jobDir , "JobDir is null");
       JobStatus jobStatus = jobsClient.getJobStatus(jobInstance);
       for (Task task : jobsClient.getTasks(jobInstance)) {
         for (String storeName : jobDir.list(DirectoryFileFilter.DIRECTORY)) {
