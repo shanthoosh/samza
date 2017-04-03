@@ -237,8 +237,7 @@ public class TestAsyncRunLoop {
     assertEquals(2L, containerMetrics.processes().getCount());
   }
 
-  // TODO: Fix in SAMZA-1183
-  //@Test
+  @Test
   public void testProcessInOrder() throws Exception {
     AsyncRunLoop runLoop = createRunLoop();
     when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope3).thenReturn(envelope1).thenReturn(null);
@@ -520,13 +519,12 @@ public class TestAsyncRunLoop {
     callbackExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
   }
 
-  // TODO: Fix in SAMZA-1183
-  // @Test
+  @Test
   public void testCommitBehaviourWhenAsyncCommitIsEnabled() throws InterruptedException {
     commitRequest = TaskCoordinator.RequestScope.CURRENT_TASK;
     maxMessagesInFlight = 2;
-    task0 = new TestTask(true, true, false);
-    task1 = new TestTask(true, false, false);
+    TestTask task0 = new TestTask(true, true, false);
+    TestTask task1 = new TestTask(true, false, false);
 
     IncomingMessageEnvelope firstMsg = new IncomingMessageEnvelope(ssp0, "0", "key0", "value0");
     IncomingMessageEnvelope secondMsg = new IncomingMessageEnvelope(ssp0, "1", "key1", "value1");
@@ -558,7 +556,7 @@ public class TestAsyncRunLoop {
     when(consumerMultiplexer.choose(false)).thenReturn(firstMsg)
                                            .thenReturn(secondMsg)
                                            .thenReturn(thirdMsg)
-                                           .thenReturn(ssp0EndOfStream);
+                                           .thenReturn(null);
 
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, true);
@@ -567,7 +565,7 @@ public class TestAsyncRunLoop {
         try {
           firstMsgCompletionLatch.await();
           secondMsgCompletionLatch.await();
-          Thread.sleep(100);
+          Thread.sleep(500);
         } catch (InterruptedException e) {
           e.printStackTrace();
         }
@@ -575,7 +573,7 @@ public class TestAsyncRunLoop {
       });
 
     runLoop.run();
-    callbackExecutor.awaitTermination(500, TimeUnit.MILLISECONDS);
+    callbackExecutor.awaitTermination(600, TimeUnit.MILLISECONDS);
 
     verify(offsetManager, atLeastOnce()).checkpoint(taskName0);
     assertEquals(3, task0.processed);
@@ -612,7 +610,7 @@ public class TestAsyncRunLoop {
     tasks.put(taskName0, createTaskInstance(task0, taskName0, ssp0));
     when(consumerMultiplexer.choose(false)).thenReturn(envelope3)
                                            .thenReturn(envelope0)
-                                           .thenReturn(ssp0EndOfStream);
+                                           .thenReturn(null);
 
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, true);
@@ -621,7 +619,7 @@ public class TestAsyncRunLoop {
     callbackExecutor.execute(() -> {
         try {
           commitLatch.await();
-          Thread.sleep(100);
+          Thread.sleep(500);
         } catch (InterruptedException e) {
           e.printStackTrace();
         }
@@ -630,6 +628,6 @@ public class TestAsyncRunLoop {
 
     runLoop.run();
 
-    callbackExecutor.awaitTermination(500, TimeUnit.MILLISECONDS);
+    callbackExecutor.awaitTermination(600, TimeUnit.MILLISECONDS);
   }
 }
