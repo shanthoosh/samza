@@ -145,8 +145,8 @@ public class TestAsyncRunLoop {
     boolean shutdown = false;
     boolean commit = false;
     boolean success;
-    int processed = 0;
-    int committed = 0;
+    AtomicInteger processed = new AtomicInteger(0);
+    AtomicInteger committed = new AtomicInteger(0);
     volatile int windowCount = 0;
 
     AtomicInteger completed = new AtomicInteger(0);
@@ -164,17 +164,17 @@ public class TestAsyncRunLoop {
         TaskCallback callback) {
 
       if (maxMessagesInFlight == 1) {
-        assertEquals(processed, completed.get());
+        assertEquals(processed.get(), completed.get());
       }
 
-      processed++;
+      processed.incrementAndGet();
 
       if (commit) {
         if (commitHandler != null) {
           callbackExecutor.submit(() -> commitHandler.run(callback));
         }
         coordinator.commit(commitRequest);
-        committed++;
+        committed.incrementAndGet();
       }
 
       if (shutdown) {
@@ -229,9 +229,9 @@ public class TestAsyncRunLoop {
 
     callbackExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
 
-    assertEquals(1, task0.processed);
+    assertEquals(1, task0.processed.get());
     assertEquals(1, task0.completed.get());
-    assertEquals(1, task1.processed);
+    assertEquals(1, task1.processed.get());
     assertEquals(1, task1.completed.get());
     assertEquals(2L, containerMetrics.envelopes().getCount());
     assertEquals(2L, containerMetrics.processes().getCount());
@@ -246,9 +246,9 @@ public class TestAsyncRunLoop {
 
     callbackExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
 
-    assertEquals(2, task0.processed);
+    assertEquals(2, task0.processed.get());
     assertEquals(2, task0.completed.get());
-    assertEquals(1, task1.processed);
+    assertEquals(1, task1.processed.get());
     assertEquals(1, task1.completed.get());
     assertEquals(3L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
@@ -288,9 +288,9 @@ public class TestAsyncRunLoop {
 
     callbackExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
 
-    assertEquals(2, task0.processed);
+    assertEquals(2, task0.processed.get());
     assertEquals(2, task0.completed.get());
-    assertEquals(1, task1.processed);
+    assertEquals(1, task1.processed.get());
     assertEquals(1, task1.completed.get());
     assertEquals(3L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
@@ -358,9 +358,9 @@ public class TestAsyncRunLoop {
 
     callbackExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
 
-    assertEquals(1, task0.processed);
+    assertEquals(1, task0.processed.get());
     assertEquals(1, task0.completed.get());
-    assertEquals(1, task1.processed);
+    assertEquals(1, task1.processed.get());
     assertEquals(1, task1.completed.get());
     assertEquals(2L, containerMetrics.envelopes().getCount());
     assertEquals(2L, containerMetrics.processes().getCount());
@@ -386,9 +386,9 @@ public class TestAsyncRunLoop {
     runLoop.run();
 
     callbackExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
-    assertEquals(1, task0.processed);
+    assertEquals(1, task0.processed.get());
     assertEquals(1, task0.completed.get());
-    assertEquals(1, task1.processed);
+    assertEquals(1, task1.processed.get());
     assertEquals(1, task1.completed.get());
     assertEquals(4L, containerMetrics.envelopes().getCount());
     assertEquals(2L, containerMetrics.processes().getCount());
@@ -419,9 +419,9 @@ public class TestAsyncRunLoop {
     runLoop.run();
 
     callbackExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
-    assertEquals(2, task0.processed);
+    assertEquals(2, task0.processed.get());
     assertEquals(2, task0.completed.get());
-    assertEquals(1, task1.processed);
+    assertEquals(1, task1.processed.get());
     assertEquals(1, task1.completed.get());
     assertEquals(5L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
@@ -520,13 +520,12 @@ public class TestAsyncRunLoop {
     callbackExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
   }
 
-  // TODO: Fix in SAMZA-1183
-  // @Test
+  @Test
   public void testCommitBehaviourWhenAsyncCommitIsEnabled() throws InterruptedException {
     commitRequest = TaskCoordinator.RequestScope.CURRENT_TASK;
     maxMessagesInFlight = 2;
-    task0 = new TestTask(true, true, false);
-    task1 = new TestTask(true, false, false);
+    TestTask task0 = new TestTask(true, true, false);
+    TestTask task1 = new TestTask(true, false, false);
 
     IncomingMessageEnvelope firstMsg = new IncomingMessageEnvelope(ssp0, "0", "key0", "value0");
     IncomingMessageEnvelope secondMsg = new IncomingMessageEnvelope(ssp0, "1", "key1", "value1");
@@ -567,7 +566,7 @@ public class TestAsyncRunLoop {
         try {
           firstMsgCompletionLatch.await();
           secondMsgCompletionLatch.await();
-          Thread.sleep(100);
+          Thread.sleep(500);
         } catch (InterruptedException e) {
           e.printStackTrace();
         }
@@ -575,13 +574,13 @@ public class TestAsyncRunLoop {
       });
 
     runLoop.run();
-    callbackExecutor.awaitTermination(500, TimeUnit.MILLISECONDS);
+    callbackExecutor.awaitTermination(600, TimeUnit.MILLISECONDS);
 
     verify(offsetManager, atLeastOnce()).checkpoint(taskName0);
-    assertEquals(3, task0.processed);
-    assertEquals(3, task0.committed);
-    assertEquals(3, task1.processed);
-    assertEquals(0, task1.committed);
+    assertEquals(3, task0.processed.get());
+    assertEquals(3, task0.committed.get());
+    assertEquals(3, task1.processed.get());
+    assertEquals(0, task1.committed.get());
   }
 
   @Test
@@ -621,7 +620,7 @@ public class TestAsyncRunLoop {
     callbackExecutor.execute(() -> {
         try {
           commitLatch.await();
-          Thread.sleep(100);
+          Thread.sleep(500);
         } catch (InterruptedException e) {
           e.printStackTrace();
         }
@@ -630,6 +629,6 @@ public class TestAsyncRunLoop {
 
     runLoop.run();
 
-    callbackExecutor.awaitTermination(500, TimeUnit.MILLISECONDS);
+    callbackExecutor.awaitTermination(600, TimeUnit.MILLISECONDS);
   }
 }
