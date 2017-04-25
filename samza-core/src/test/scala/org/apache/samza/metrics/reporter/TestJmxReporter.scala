@@ -19,65 +19,39 @@
 
 package org.apache.samza.metrics.reporter
 
-import org.junit.Assert._
-import org.junit.AfterClass
-import org.junit.BeforeClass
-import org.junit.Test
-import org.apache.samza.task.TaskContext
-import org.apache.samza.metrics.MetricsRegistryMap
-import org.apache.samza.config.MapConfig
-import org.apache.samza.metrics.JvmMetrics
-
-import java.lang.management.ManagementFactory
-import java.rmi.registry.LocateRegistry
-
+import javax.management.MBeanServer
 import javax.management.ObjectName
-import javax.management.remote.JMXServiceURL
-import javax.management.remote.JMXConnectorServerFactory
-import javax.management.remote.JMXConnectorServer
-import javax.management.remote.JMXConnectorFactory
-
-import scala.collection.JavaConverters._
-
-object TestJmxReporter {
-  val port = 4500
-  val url = new JMXServiceURL("service:jmx:rmi:///jndi/rmi://localhost:%d/jmxapitestrmi" format port)
-  var cs: JMXConnectorServer = null
-
-  @BeforeClass
-  def beforeSetupServers {
-    LocateRegistry.createRegistry(port)
-    val mbs = ManagementFactory.getPlatformMBeanServer()
-    cs = JMXConnectorServerFactory.newJMXConnectorServer(url, null, mbs)
-    cs.start
-  }
-
-  @AfterClass
-  def afterCleanLogDirs {
-    if (cs != null) {
-      cs.stop
-    }
-  }
-}
+import org.apache.samza.metrics.{JmxUtil, MetricsRegistryMap}
+import org.junit.Test
+import org.mockito.Matchers
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.when
 
 class TestJmxReporter {
-  import TestJmxReporter.url
 
-  // TODO: Fix in SAMZA-1196
-  //@Test
+  val REPORTER_SOURCE = "test"
+
+  @Test
   def testJmxReporter {
-    val registry = new MetricsRegistryMap
-    val jvm = new JvmMetrics(registry)
-    val reporter = new JmxReporterFactory().getMetricsReporter("", "", new MapConfig(Map[String, String]().asJava))
+    val metricsGroup = "org.apache.samza.metrics.JvmMetrics"
+    val metricsName = "mem-non-heap-used-mb"
+    val objectName: ObjectName = JmxUtil.getObjectName(metricsGroup, metricsName, REPORTER_SOURCE)
 
-    reporter.register("test", registry)
+    val registry: MetricsRegistryMap = new MetricsRegistryMap
+    val mBeanServerMock: MBeanServer = mock(classOf[MBeanServer])
+
+    // Create dummy test metrics.
+    registry.newCounter(metricsGroup, metricsName)
+
+    when(mBeanServerMock.isRegistered(objectName)).thenReturn(false)
+
+    val reporter = new JmxReporter(mBeanServerMock)
+    reporter.register(REPORTER_SOURCE, registry)
     reporter.start
-    jvm.run
 
-    val mbserver = JMXConnectorFactory.connect(url).getMBeanServerConnection
-    val stateViaJMX = mbserver.getAttribute(new ObjectName("org.apache.samza.metrics.JvmMetrics:type=test,name=mem-non-heap-used-mb"), "Value").asInstanceOf[Float]
-
-    assertTrue(stateViaJMX > 0)
+    verify(mBeanServerMock, times(1)).registerMBean(Matchers.anyObject(), Matchers.eq(objectName))
 
     reporter.stop
   }
