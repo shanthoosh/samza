@@ -642,6 +642,9 @@ project(":samza-test_$scalaVersion") {
     testCompile "org.scalatest:scalatest_$scalaVersion:$scalaTestVersion"
     testCompile "org.mockito:mockito-all:$mockitoVersion"
     testRuntime "org.slf4j:slf4j-simple:$slf4jVersion"
+    testCompile "org.powermock:powermock-api-mockito:$powerMockVersion"
+    testCompile "org.powermock:powermock-core:$powerMockVersion"
+    testCompile "org.powermock:powermock-module-junit4:$powerMockVersion"
   }
 
   test {

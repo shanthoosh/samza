@@ -288,4 +288,28 @@ public class TestZkStreamProcessor extends TestZkStreamProcessorBase {
     // Meanwhile the number of events we gonna get is 40 + 80
     verifyNumMessages(outputTopic, 2 * messageCount, totalEventsToGenerate);
   }
+
+  @Test
+  public void shouldKillStreamProcessorsOnFailuresWhenWaitingForBarrier() {
+  }
+
+  @Test
+  public void shouldContinueWithRemainingProcessorsDuringBarrierWaitAProcessorFails() {
+
+  }
+
+  @Test
+  public void shouldWaitUntilAllStreamProcessorsJoinBarrier() {
+
+  }
+
+  @Test
+  public void shouldHaveFixedRetriesForFailureWhenWaitingForBarrier() {
+
+  }
+
+  @Test
+  public void shouldRecreateBarrierWithAliveProcessorsOnExpiryOfExistingBarrier() {
+
+  }
 }
