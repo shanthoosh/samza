@@ -34,25 +34,16 @@ import org.apache.samza.config.JobConfig;
 import org.apache.samza.config.MapConfig;
 import org.apache.samza.config.StorageConfig;
 import org.apache.samza.container.LocalityManager;
-import org.apache.samza.container.TaskName;
-import org.apache.samza.coordinator.JobModelManager;
 import org.apache.samza.coordinator.stream.CoordinatorStreamSystemConsumer;
 import org.apache.samza.coordinator.stream.CoordinatorStreamSystemFactory;
 import org.apache.samza.coordinator.stream.CoordinatorStreamSystemProducer;
-import org.apache.samza.job.model.ContainerModel;
-import org.apache.samza.job.model.JobModel;
-import org.apache.samza.job.model.TaskModel;
+import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping;
 import org.apache.samza.metrics.MetricsRegistryMap;
-import org.apache.samza.rest.model.Partition;
 import org.apache.samza.rest.model.Task;
 import org.apache.samza.rest.proxy.installation.InstallationFinder;
 import org.apache.samza.rest.proxy.installation.InstallationRecord;
 import org.apache.samza.rest.proxy.job.JobInstance;
-import org.apache.samza.storage.ChangelogPartitionManager;
-import org.apache.samza.system.StreamMetadataCache;
-import org.apache.samza.system.SystemAdmin;
 import org.apache.samza.util.ClassLoaderHelper;
-import org.apache.samza.util.SystemClock;
 import org.apache.samza.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,51 +80,6 @@ public class SamzaTaskProxy implements TaskProxy {
       throws IOException, InterruptedException {
     Preconditions.checkArgument(installFinder.isInstalled(jobInstance),
                                 String.format("Invalid job instance : %s", jobInstance));
-    JobModel jobModel = getJobModel(jobInstance);
-    StorageConfig storageConfig = new StorageConfig(jobModel.getConfig());
-
-    List<String> storeNames = JavaConverters.seqAsJavaListConverter(storageConfig.getStoreNames()).asJava();
-    Map<String, String> containerLocality = jobModel.getAllContainerLocality();
-    List<Task> tasks = new ArrayList<>();
-    for (ContainerModel containerModel : jobModel.getContainers().values()) {
-      String containerId = containerModel.getProcessorId();
-      String host = containerLocality.get(containerId);
-      for (TaskModel taskModel : containerModel.getTasks().values()) {
-        String taskName = taskModel.getTaskName().getTaskName();
-        List<Partition> partitions = taskModel.getSystemStreamPartitions()
-                                              .stream()
-                                              .map(Partition::new).collect(Collectors.toList());
-        tasks.add(new Task(host, taskName, containerId, partitions, storeNames));
-      }
-    }
-    return tasks;
-  }
-
-  /**
-   * Builds coordinator system config for the {@param jobInstance}.
-   * @param jobInstance the job instance to get the jobModel for.
-   * @return the constructed coordinator system config.
-   */
-  private Config getCoordinatorSystemConfig(JobInstance jobInstance) {
-    try {
-      InstallationRecord record = installFinder.getAllInstalledJobs().get(jobInstance);
-      ConfigFactory configFactory =  ClassLoaderHelper.fromClassName(taskResourceConfig.getJobConfigFactory());
-      Config config = configFactory.getConfig(new URI(String.format("file://%s", record.getConfigFilePath())));
-      Map<String, String> configMap = ImmutableMap.of(JobConfig.JOB_ID(), jobInstance.getJobId(),
-                                                      JobConfig.JOB_NAME(), jobInstance.getJobName());
-      return Util.buildCoordinatorStreamConfig(new MapConfig(ImmutableList.of(config, configMap)));
-    } catch (Exception e) {
-      LOG.error(String.format("Failed to get coordinator stream config for job : %s", jobInstance), e);
-      throw new SamzaException(e);
-    }
-  }
-
-  /**
-   * Retrieves the jobModel from the jobCoordinator.
-   * @param jobInstance the job instance (jobId, jobName).
-   * @return the JobModel fetched from the coordinator stream.
-   */
-  protected JobModel getJobModel(JobInstance jobInstance) {
     CoordinatorStreamSystemConsumer coordinatorSystemConsumer = null;
     CoordinatorStreamSystemProducer coordinatorSystemProducer = null;
     try {
@@ -150,25 +96,7 @@ public class SamzaTaskProxy implements TaskProxy {
       coordinatorSystemConsumer.bootstrap();
       LOG.info("Registering coordinator system stream producer.");
       coordinatorSystemProducer.register(SOURCE);
-
-      Config config = coordinatorSystemConsumer.getConfig();
-      LOG.info("Got config from coordinatorSystemConsumer: {}.", config);
-      ChangelogPartitionManager changelogManager = new ChangelogPartitionManager(coordinatorSystemProducer, coordinatorSystemConsumer, SOURCE);
-      changelogManager.start();
-      LocalityManager localityManager = new LocalityManager(coordinatorSystemProducer, coordinatorSystemConsumer);
-      localityManager.start();
-
-      String jobCoordinatorSystemName = config.get(JobConfig.JOB_COORDINATOR_SYSTEM());
-
-      /**
-       * Select job coordinator system properties from config and instantiate SystemAdmin for it alone.
-       * Instantiating SystemAdmin's for other input/output systems defined in config is unnecessary.
-       */
-      Config systemAdminConfig = config.subset(String.format("systems.%s", jobCoordinatorSystemName), false);
-      scala.collection.immutable.Map<String, SystemAdmin> systemAdmins = JobModelManager.getSystemAdmins(systemAdminConfig);
-      StreamMetadataCache streamMetadataCache = new StreamMetadataCache(systemAdmins, 0, SystemClock.instance());
-      Map<TaskName, Integer> changeLogPartitionMapping = changelogManager.readChangeLogPartitionMapping();
-      return JobModelManager.readJobModel(config, changeLogPartitionMapping, localityManager, streamMetadataCache, null);
+      return readTasksFromCoordinatorStream(coordinatorSystemConsumer, coordinatorSystemProducer);
     } finally {
       if (coordinatorSystemConsumer != null) {
         coordinatorSystemConsumer.stop();
@@ -177,5 +105,45 @@ public class SamzaTaskProxy implements TaskProxy {
         coordinatorSystemProducer.stop();
       }
     }
+  }
+
+  /**
+   * Builds coordinator system config for the {@param jobInstance}.
+   * @param jobInstance the job instance to get the jobModel for.
+   * @return the constructed coordinator system config.
+   */
+  private Config getCoordinatorSystemConfig(JobInstance jobInstance) {
+    try {
+      InstallationRecord record = installFinder.getAllInstalledJobs().get(jobInstance);
+      ConfigFactory configFactory =  ClassLoaderHelper.fromClassName(taskResourceConfig.getJobConfigFactory());
+      Config config = configFactory.getConfig(new URI(String.format("file://%s", record.getConfigFilePath())));
+      Map<String, String> configMap = ImmutableMap.of(JobConfig.JOB_ID(), jobInstance.getJobId(),
+          JobConfig.JOB_NAME(), jobInstance.getJobName());
+      return Util.buildCoordinatorStreamConfig(new MapConfig(ImmutableList.of(config, configMap)));
+    } catch (Exception e) {
+      LOG.error(String.format("Failed to get coordinator stream config for job : %s", jobInstance), e);
+      throw new SamzaException(e);
+    }
+  }
+
+  /**
+   * Builds list of {@link Task} from job model in coordinator stream.
+   * @param consumer system consumer associated with a job's coordinator stream.
+   * @param producer system producer associated with a job's coordinator stream.
+   * @return list of {@link Task} constructed from job model in coordinator stream.
+   */
+  private static List<Task> readTasksFromCoordinatorStream(CoordinatorStreamSystemConsumer consumer,
+                                                           CoordinatorStreamSystemProducer producer) {
+    LocalityManager localityManager = new LocalityManager(producer, consumer);
+    Map<String, Map<String, String>> containerIdToHostMapping = localityManager.readContainerLocality();
+    Map<String, String> taskNameToContainerIdMapping = localityManager.getTaskAssignmentManager().readTaskAssignment();
+    StorageConfig storageConfig = new StorageConfig(consumer.getConfig());
+    List<String> storeNames = JavaConverters.seqAsJavaListConverter(storageConfig.getStoreNames()).asJava();
+    return taskNameToContainerIdMapping.entrySet()
+                                       .stream()
+                                       .map(entry -> {
+        String hostName = containerIdToHostMapping.get(entry.getValue()).get(SetContainerHostMapping.HOST_KEY);
+        return new Task(hostName, entry.getKey(), entry.getValue(), new ArrayList<>(), storeNames);
+                                       }).collect(Collectors.toList());
   }
 }
