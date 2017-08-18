@@ -19,10 +19,11 @@
 package org.apache.samza.test.harness
 
 import kafka.utils.{ZkUtils, Logging, CoreUtils}
-import kafka.zk.{EmbeddedZookeeper, ZkFourLetterWords}
+import kafka.zk.ZkFourLetterWords
 import org.junit.{After, Before}
 import org.apache.kafka.common.security.JaasUtils
 import javax.security.auth.login.Configuration
+import org.apache.samza.test.harness.EmbeddedZookeeper
 /**
  * Zookeeper test harness.
  * This is simply a copy of open source Kafka code, we do this because java does not support trait, we are making it abstract
@@ -52,19 +53,6 @@ abstract class AbstractZookeeperTestHarness extends Logging {
       CoreUtils.swallow(zkUtils.close())
     if (zookeeper != null)
       CoreUtils.swallow(zookeeper.shutdown())
-
-    def isDown: Boolean = {
-      try {
-        ZkFourLetterWords.sendStat("127.0.0.1", zkPort, 3000)
-        false
-      } catch {
-        case _: Throwable =>
-          debug("Server is down")
-          true
-      }
-    }
-
-    Iterator.continually(isDown).exists(identity)
 
     Configuration.setConfiguration(null)
   }
