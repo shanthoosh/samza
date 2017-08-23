@@ -23,9 +23,9 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -56,21 +56,27 @@ public class ScheduleAfterDebounceTime {
    **/
   public static final String ON_ZK_CLEANUP = "OnCleanUp";
 
-  private final ScheduledTaskFailureCallback scheduledTaskFailureCallback;
+  /**
+   *
+   */
+  private final ScheduledThreadPoolExecutor scheduledExecutorService;
 
-  private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(
-      new ThreadFactoryBuilder().setNameFormat("debounce-thread-%d").setDaemon(true).build());
-  private final Map<String, ScheduledFuture> futureHandles = new HashMap<>();
+  /**
+   *
+   */
+  private final Map<String, ScheduledFuture> futureHandles;
 
   // Ideally, this should be only used for testing. But ZkBarrierForVersionUpgrades uses it. This needs to be fixed.
   // TODO: Timer shouldn't be passed around the components. It should be associated with the JC or the caller of
   // coordinationUtils.
   public ScheduleAfterDebounceTime() {
-    this.scheduledTaskFailureCallback = null;
+    this(null);
   }
 
-  public ScheduleAfterDebounceTime(ScheduledTaskFailureCallback errorScheduledTaskFailureCallback) {
-    this.scheduledTaskFailureCallback = errorScheduledTaskFailureCallback;
+  public ScheduleAfterDebounceTime(ScheduledTaskFailureCallback scheduledTaskFailureCallback) {
+    ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("debounce-thread-%d").setDaemon(true).build();
+    scheduledExecutorService = new ScheduledTaskPool(1, threadFactory, scheduledTaskFailureCallback);
+    futureHandles = new HashMap<>();
   }
 
   synchronized public void scheduleAfterDebounceTime(String actionName, long debounceTimeMs, Runnable runnable) {
@@ -96,9 +102,6 @@ public class ScheduleAfterDebounceTime {
           LOG.debug(actionName + " completed successfully.");
         } catch (Throwable t) {
           LOG.error(actionName + " threw an exception.", t);
-          if (scheduledTaskFailureCallback != null) {
-            scheduledTaskFailureCallback.onError(t);
-          }
         }
       },
      debounceTimeMs,
@@ -108,8 +111,35 @@ public class ScheduleAfterDebounceTime {
   }
 
   public void stopScheduler() {
-    // shutdown executor service
-    scheduledExecutorService.shutdown();
+    /**
+     * Add javadoc here, explaining the switch.
+     */
+    scheduledExecutorService.shutdownNow();
+  }
+
+  private class ScheduledTaskPool extends ScheduledThreadPoolExecutor {
+
+    private final ScheduledTaskFailureCallback scheduledTaskFailureCallback;
+
+    public ScheduledTaskPool(int corePoolSize, ThreadFactory threadFactory,
+        ScheduledTaskFailureCallback scheduledTaskFailureCallback) {
+      super(corePoolSize, threadFactory);
+      this.scheduledTaskFailureCallback = scheduledTaskFailureCallback;
+    }
+
+    @Override
+    protected void afterExecute(Runnable r, Throwable t) {
+      super.afterExecute(r, t);
+      if (t != null) {
+        /**
+         * Add java doc here with detailed explanation.
+         */
+        futureHandles.clear();
+        if (scheduledTaskFailureCallback != null) {
+          scheduledTaskFailureCallback.onError(t);
+        }
+      }
+    }
   }
 
   interface ScheduledTaskFailureCallback {
