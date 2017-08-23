@@ -20,14 +20,13 @@
 package org.apache.samza.zk;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +38,11 @@ import org.slf4j.LoggerFactory;
  */
 public class ScheduleAfterDebounceTime {
   public static final Logger LOG = LoggerFactory.getLogger(ScheduleAfterDebounceTime.class);
-  public static final long TIMEOUT_MS = 1000 * 10; // timeout to wait for a task to complete
+
+  /**
+   * Add more java docs.
+   */
+  private static final long TASK_WAIT_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
 
   // Here we predefine some actions which are used in the ZK based standalone app.
   // Action name when the JobModel version changes
@@ -57,12 +60,12 @@ public class ScheduleAfterDebounceTime {
   public static final String ON_ZK_CLEANUP = "OnCleanUp";
 
   /**
-   *
+   * Fill in java doc.
    */
-  private final ScheduledThreadPoolExecutor scheduledExecutorService;
+  private final ScheduledTaskThreadPool scheduledTaskThreadPool;
 
   /**
-   *
+   * Fill in java doc.
    */
   private final Map<String, ScheduledFuture> futureHandles;
 
@@ -75,7 +78,7 @@ public class ScheduleAfterDebounceTime {
 
   public ScheduleAfterDebounceTime(ScheduledTaskFailureCallback scheduledTaskFailureCallback) {
     ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("debounce-thread-%d").setDaemon(true).build();
-    scheduledExecutorService = new ScheduledTaskPool(1, threadFactory, scheduledTaskFailureCallback);
+    scheduledTaskThreadPool = new ScheduledTaskThreadPool(1, threadFactory, scheduledTaskFailureCallback);
     futureHandles = new HashMap<>();
   }
 
@@ -87,58 +90,82 @@ public class ScheduleAfterDebounceTime {
       // attempt to cancel
       if (!sf.cancel(false)) {
         try {
-          sf.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          sf.get(TASK_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
           // we ignore the exception
-          LOG.warn("cancel for action " + actionName + " failed with ", e);
+          LOG.warn("Cancel for action " + actionName + " failed with ", e);
         }
       }
       futureHandles.remove(actionName);
     }
     // schedule a new task
-    sf = scheduledExecutorService.schedule(() -> {
-        try {
-          runnable.run();
-          LOG.debug(actionName + " completed successfully.");
-        } catch (Throwable t) {
-          LOG.error(actionName + " threw an exception.", t);
-        }
-      },
-     debounceTimeMs,
-     TimeUnit.MILLISECONDS);
-    LOG.info("scheduled " + actionName + " in " + debounceTimeMs);
+    sf = scheduledTaskThreadPool.schedule(actionName, runnable, debounceTimeMs, TimeUnit.MILLISECONDS);
     futureHandles.put(actionName, sf);
   }
 
   public void stopScheduler() {
     /**
-     * Add javadoc here, explaining the switch.
+     * Add javadoc here.
      */
-    scheduledExecutorService.shutdownNow();
+    scheduledTaskThreadPool.shutdownNow();
   }
 
-  private class ScheduledTaskPool extends ScheduledThreadPoolExecutor {
+  /**
+   * Purpose : To receive interrupted exception when using ScheduledExecutorService.
+   * Fill in java doc.
+   */
+  private class ScheduledTaskThreadPool extends ScheduledThreadPoolExecutor {
 
-    private final ScheduledTaskFailureCallback scheduledTaskFailureCallback;
+    /**
+     * Fill in java doc.
+     */
+    private final Optional<ScheduledTaskFailureCallback> taskFailureCallbackOptional;
 
-    public ScheduledTaskPool(int corePoolSize, ThreadFactory threadFactory,
-        ScheduledTaskFailureCallback scheduledTaskFailureCallback) {
+    /**
+     * Fill in java doc.
+     */
+    private final Map<Runnable, String> submittedTasks;
+
+    public ScheduledTaskThreadPool(int corePoolSize, ThreadFactory threadFactory, ScheduledTaskFailureCallback taskFailureCallbackOptional) {
       super(corePoolSize, threadFactory);
-      this.scheduledTaskFailureCallback = scheduledTaskFailureCallback;
+      this.taskFailureCallbackOptional = Optional.ofNullable(taskFailureCallbackOptional);
+      submittedTasks = new HashMap<>();
+    }
+
+    /**
+     *
+     * @param actionName
+     * @param command
+     * @param delay
+     * @param unit
+     * @return
+     */
+    public ScheduledFuture<?> schedule(String actionName, Runnable command, long delay, TimeUnit unit) {
+      LOG.info("scheduled " + actionName + " in " + delay + " milliseconds");
+      submittedTasks.put(command, actionName);
+      return super.schedule(command, delay, unit);
     }
 
     @Override
-    protected void afterExecute(Runnable r, Throwable t) {
-      super.afterExecute(r, t);
-      if (t != null) {
+    protected void afterExecute(Runnable runnable, Throwable throwable) {
+      System.out.println(throwable);
+      String actionName = submittedTasks.get(runnable);
+      if (throwable != null) {
         /**
-         * Add java doc here with detailed explanation.
+         * Add java doc explaining the logical sequence of actions..
          */
+        // 1. Clear future handles. Since this starts a shutdown.
         futureHandles.clear();
-        if (scheduledTaskFailureCallback != null) {
-          scheduledTaskFailureCallback.onError(t);
+        System.out.println("HO HO HO! Here.");
+        // 2. Report exception if taskFailureCallbackOptional is present and Log.
+        taskFailureCallbackOptional.ifPresent(x -> x.onError(throwable));
+        if (actionName != null) {
+          LOG.error(actionName + " threw an exception.", throwable);
         }
+      } else if (actionName != null) {
+        LOG.debug(actionName + " completed successfully.");
       }
+      super.afterExecute(runnable, throwable);
     }
   }
 
