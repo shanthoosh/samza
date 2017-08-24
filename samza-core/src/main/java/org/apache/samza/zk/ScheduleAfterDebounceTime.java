@@ -20,14 +20,13 @@
 package org.apache.samza.zk;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,7 +55,7 @@ public class ScheduleAfterDebounceTime {
    **/
   public static final String ON_ZK_CLEANUP = "OnCleanUp";
 
-  private final ScheduledTaskFailureCallback scheduledTaskFailureCallback;
+  private final Optional<ScheduledTaskCallback> scheduledTaskCallback;
 
   private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(
       new ThreadFactoryBuilder().setNameFormat("debounce-thread-%d").setDaemon(true).build());
@@ -65,12 +64,10 @@ public class ScheduleAfterDebounceTime {
   // Ideally, this should be only used for testing. But ZkBarrierForVersionUpgrades uses it. This needs to be fixed.
   // TODO: Timer shouldn't be passed around the components. It should be associated with the JC or the caller of
   // coordinationUtils.
-  public ScheduleAfterDebounceTime() {
-    this.scheduledTaskFailureCallback = null;
-  }
+  public ScheduleAfterDebounceTime() { this(null); }
 
-  public ScheduleAfterDebounceTime(ScheduledTaskFailureCallback errorScheduledTaskFailureCallback) {
-    this.scheduledTaskFailureCallback = errorScheduledTaskFailureCallback;
+  public ScheduleAfterDebounceTime(ScheduledTaskCallback scheduledTaskCallback) {
+    this.scheduledTaskCallback = Optional.ofNullable(scheduledTaskCallback);
   }
 
   synchronized public void scheduleAfterDebounceTime(String actionName, long debounceTimeMs, Runnable runnable) {
@@ -84,7 +81,7 @@ public class ScheduleAfterDebounceTime {
           sf.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
           // we ignore the exception
-          LOG.warn("cancel for action " + actionName + " failed with ", e);
+          LOG.warn("Cancel for action: {} failed.", new Object[]{actionName, e});
         }
       }
       futureHandles.remove(actionName);
@@ -93,19 +90,36 @@ public class ScheduleAfterDebounceTime {
     sf = scheduledExecutorService.schedule(() -> {
         try {
           runnable.run();
-          LOG.debug(actionName + " completed successfully.");
-        } catch (Throwable t) {
-          System.out.println("Here-2! HO HO HO!!!");
-          LOG.error(actionName + " threw an exception.", t);
-          if (scheduledTaskFailureCallback != null) {
-            scheduledTaskFailureCallback.onError(t);
+          LOG.debug("Action: {} completed successfully.", actionName);
+          /**
+           * Expects all run() implementations <b>not to swallow the interrupts.</b>
+           * Interrupts are provided in following two scenarios
+           * A) From the ExecutorService, asking the task to shutdown.
+           * B)
+           */
+          if (Thread.currentThread().isInterrupted()) {
+            LOG.info("Interrupt received from executor service to shutdown.");
+            scheduledTaskCallback.ifPresent(callback -> callback.onError(new InterruptedException()));
           }
+        } catch (Throwable throwable) {
+          LOG.error("Execution of action: {} failed.", new Object[]{actionName, throwable});
+          scheduledTaskCallback.ifPresent(callback -> callback.onError(throwable));
         }
       },
      debounceTimeMs,
      TimeUnit.MILLISECONDS);
-    LOG.info("scheduled " + actionName + " in " + debounceTimeMs);
+    LOG.info("Scheduled action: {} to run after: {} milliseconds.", actionName, debounceTimeMs);
     futureHandles.put(actionName, sf);
+  }
+
+  private void onError(Throwable throwable) {
+    // FIX IT before review: This clear action is happening from ExecutorService thread
+    // and update happens in user thread. Synchronize both of them.
+    // 1. Cleanup state.
+    futureHandles.clear();
+
+    // 2. ScheduledTaskCallback.onError if present.
+    scheduledTaskCallback.ifPresent(callback -> callback.onError(throwable));
   }
 
   public void stopScheduler() {
@@ -113,7 +127,7 @@ public class ScheduleAfterDebounceTime {
     scheduledExecutorService.shutdownNow();
   }
 
-  interface ScheduledTaskFailureCallback {
+  interface ScheduledTaskCallback {
     void onError(Throwable throwable);
   }
 }

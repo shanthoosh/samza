@@ -19,14 +19,22 @@
 
 package org.apache.samza.zk;
 
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.junit.Assert;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.Timeout;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TestScheduleAfterDebounceTime {
+  private static final Logger LOG = LoggerFactory.getLogger(TestScheduleAfterDebounceTime.class);
+
   private static final long WAIT_TIME = 500;
+
+  @Rule
+  public Timeout testTimeOutInSeconds = new Timeout(10, TimeUnit.SECONDS);
 
   class TestObj {
     private volatile int i = 0;
@@ -110,23 +118,55 @@ public class TestScheduleAfterDebounceTime {
     scheduledQueue.stopScheduler();
   }
 
+  /**
+   * Validates if the interrupted exception triggered by
+   * ExecutorService is handled by ScheduleAfterDebounceTime.
+   */
   @Test
   public void testOnShutdownInvokesTheCallback() throws InterruptedException {
-    final CountDownLatch latch = new CountDownLatch(1);
+    final CountDownLatch hasCallbackCompleted = new CountDownLatch(1);
+    final CountDownLatch hasThreadStarted = new CountDownLatch(1);
+    final CountDownLatch isSchedulerShutdownTriggered = new CountDownLatch(1);
+
+    /**
+     * Declaring this as an array to record the value inside the lambda.
+     */
+    final Throwable[] receivedException = new Exception[1];
+
     ScheduleAfterDebounceTime scheduledQueue = new ScheduleAfterDebounceTime(e -> {
-      Assert.assertEquals(RuntimeException.class, e.getClass());
-      latch.countDown();
+      /**
+       * Assertion failures in callback doesn't fail the test.
+       * Record the received exception here and assert outside
+       * the callback.
+       */
+      receivedException[0] = e;
+      hasCallbackCompleted.countDown();
     });
 
-    scheduledQueue.scheduleAfterDebounceTime("TEST1", 0, () ->
-    {
+    scheduledQueue.scheduleAfterDebounceTime("TEST1", WAIT_TIME , () -> {
+      hasThreadStarted.countDown();
+      try {
+        LOG.debug("Waiting for the shutdown trigger.");
+        isSchedulerShutdownTriggered.await();
+        /**
+         * Set interrupt status to true.
+         * Expect the ScheduleDebounceTime task queue to handle this interrupt
+         * and invoke ScheduledTaskCallback.
+         */
+        Thread.currentThread().interrupt();
+      } catch (InterruptedException e) {
+        /**
+         * Set interrupt status to true.
+         * Expect the ScheduleDebounceTime task queue to handle this interrupt
+         * and invoke ScheduledTaskCallback.
+         */
+        Thread.currentThread().interrupt();
+      }
     });
-
+    hasThreadStarted.await();
     scheduledQueue.stopScheduler();
-
-    boolean result = latch.await(20 * WAIT_TIME, TimeUnit.MILLISECONDS);
-    Assert.assertTrue("Latch timed-out.", result);
-
-    System.out.println(latch.getCount());
+    isSchedulerShutdownTriggered.countDown();
+    hasCallbackCompleted.await();
+    Assert.assertEquals(InterruptedException.class, receivedException[0].getClass());
   }
 }
