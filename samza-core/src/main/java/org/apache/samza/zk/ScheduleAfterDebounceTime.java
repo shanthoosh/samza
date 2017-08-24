@@ -89,12 +89,6 @@ public class ScheduleAfterDebounceTime {
       LOG.info("cancel future for " + actionName);
       // attempt to cancel
       if (!sf.cancel(false)) {
-        try {
-          sf.get(TASK_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (Exception e) {
-          // we ignore the exception
-          LOG.warn("Cancel for action " + actionName + " failed with ", e);
-        }
       }
       futureHandles.remove(actionName);
     }
@@ -126,9 +120,9 @@ public class ScheduleAfterDebounceTime {
      */
     private final Map<Runnable, String> submittedTasks;
 
-    public ScheduledTaskThreadPool(int corePoolSize, ThreadFactory threadFactory, ScheduledTaskFailureCallback taskFailureCallbackOptional) {
+    public ScheduledTaskThreadPool(int corePoolSize, ThreadFactory threadFactory, ScheduledTaskFailureCallback taskFailureCallback) {
       super(corePoolSize, threadFactory);
-      this.taskFailureCallbackOptional = Optional.ofNullable(taskFailureCallbackOptional);
+      this.taskFailureCallbackOptional = Optional.ofNullable(taskFailureCallback);
       submittedTasks = new HashMap<>();
     }
 
@@ -156,7 +150,6 @@ public class ScheduleAfterDebounceTime {
          */
         // 1. Clear future handles. Since this starts a shutdown.
         futureHandles.clear();
-        System.out.println("HO HO HO! Here.");
         // 2. Report exception if taskFailureCallbackOptional is present and Log.
         taskFailureCallbackOptional.ifPresent(x -> x.onError(throwable));
         if (actionName != null) {
