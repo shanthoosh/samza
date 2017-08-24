@@ -109,4 +109,24 @@ public class TestScheduleAfterDebounceTime {
     Assert.assertEquals(0, testObj.get());
     scheduledQueue.stopScheduler();
   }
+
+  @Test
+  public void testOnShutdownInvokesTheCallback() throws InterruptedException {
+    final CountDownLatch latch = new CountDownLatch(1);
+    ScheduleAfterDebounceTime scheduledQueue = new ScheduleAfterDebounceTime(e -> {
+      Assert.assertEquals(RuntimeException.class, e.getClass());
+      latch.countDown();
+    });
+
+    scheduledQueue.scheduleAfterDebounceTime("TEST1", 0, () ->
+    {
+    });
+
+    scheduledQueue.stopScheduler();
+
+    boolean result = latch.await(20 * WAIT_TIME, TimeUnit.MILLISECONDS);
+    Assert.assertTrue("Latch timed-out.", result);
+
+    System.out.println(latch.getCount());
+  }
 }
