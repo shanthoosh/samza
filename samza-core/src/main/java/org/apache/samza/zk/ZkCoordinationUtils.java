@@ -19,6 +19,7 @@
 package org.apache.samza.zk;
 
 import org.I0Itec.zkclient.exception.ZkInterruptedException;
+import org.apache.samza.config.Config;
 import org.apache.samza.config.ZkConfig;
 import org.apache.samza.coordinator.CoordinationUtils;
 import org.apache.samza.coordinator.DistributedLockWithState;
@@ -53,7 +54,7 @@ public class ZkCoordinationUtils implements CoordinationUtils {
 
   @Override
   public DistributedLockWithState getLockWithState(String lockId) {
-    return new ZkDistributedLock(processorIdStr, zkUtils, lockId);
+    return new ZkDistributedLock(processorIdStr, zkUtils, lockId, config -> String.valueOf(System.currentTimeMillis()), zkConfig);
   }
 
   public void close() {

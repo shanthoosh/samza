@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.samza.SamzaException;
@@ -62,6 +63,7 @@ public class LocalApplicationRunner extends AbstractApplicationRunner {
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final AtomicInteger numProcessorsToStart = new AtomicInteger();
   private final AtomicReference<Throwable> failure = new AtomicReference<>();
+  private final CoordinationUtils coordinationUtils = getCoordinationUtils();
 
   private ApplicationStatus appStatus = ApplicationStatus.New;
 
@@ -116,6 +118,7 @@ public class LocalApplicationRunner extends AbstractApplicationRunner {
         }
       }
 
+      coordinationUtils.close();
       shutdownLatch.countDown();
     }
   }
@@ -147,17 +150,34 @@ public class LocalApplicationRunner extends AbstractApplicationRunner {
   @Override
   public void run(StreamApplication app) {
     try {
-      // 1. initialize and plan
-      ExecutionPlan plan = getExecutionPlan(app);
+      // Move the scope of coordination utils within stream creation to address long idle connection problem.
+      // Refer SAMZA-1385 for more details
+      DistributedLockWithState lockWithState = getLock(app);
 
+      // 1. initialize and plan
+      LOG.info("A single processor must create the intermediate streams. Processor {} will attempt to acquire the lock.", uid);
+      DistributedLockWithState.LockResponse lockResponse = lockWithState.lockIfNotSet(1000, TimeUnit.MILLISECONDS);
+
+      ExecutionPlan plan = getExecutionPlan(app, lockResponse.getRunId());
       String executionPlanJson = plan.getPlanAsJson();
       writePlanJsonFile(executionPlanJson);
 
       // 2. create the necessary streams
       // TODO: System generated intermediate streams should have robust naming scheme. See SAMZA-1391
-      String planId = String.valueOf(executionPlanJson.hashCode());
-      createStreams(planId, plan.getIntermediateStreams());
+      if (lockResponse.hasAcquiredLock()) {
+        // if (!globalState.exists)
+        createStreams(plan.getIntermediateStreams());
+        // globalState.create(lockPath).
+        //zkUtils.getZkClient().createPersistent(statePath, true);
 
+      } else {
+        LOG.info("Processor {} did not obtain the lock for streams creation. They must've been created by another processor.", uid);
+      }
+/**      // !State exists!
+      if (!globalState.exists) {
+        throw new Exception
+      }
+*/
       // 3. create the StreamProcessors
       if (plan.getJobConfigs().isEmpty()) {
         throw new SamzaException("No jobs to run.");
@@ -177,6 +197,37 @@ public class LocalApplicationRunner extends AbstractApplicationRunner {
       throw new SamzaException("Failed to start application", e);
     }
   }
+
+  private DistributedLockWithState getLock(StreamApplication app) throws Exception {
+    ExecutionPlan plan = getExecutionPlan(app);
+    String lockId = String.valueOf(plan.getPlanAsJson().hashCode());
+    return coordinationUtils.getLockWithState(lockId);
+  }
+
+  private CoordinationUtils getCoordinationUtils() {
+    JobCoordinatorConfig jcConfig = new JobCoordinatorConfig(config);
+    String coordinationId = new ApplicationConfig(config).getGlobalAppId() + APPLICATION_RUNNER_PATH_SUFFIX;
+    return jcConfig.getCoordinationUtilsFactory().getCoordinationUtils(coordinationId, uid, config);
+  }
+
+  /**
+   * Intermediate streams creation function try-catch
+   * catch (TimeoutException e) {
+   String msg = String.format("Processor {} failed to get the lock for stream initialization", uid);
+   throw new SamzaException(msg, e);
+   }
+
+   CoordinationUtils finally function.
+   if (coordinationUtils == null) {
+   LOG.warn("Processor {} failed to create utils. Each processor will attempt to create streams.", uid);
+   // each application process will try creating the streams, which
+   // requires stream creation to be idempotent
+   getStreamManager().createStreams(intStreams);
+   return;
+   }
+
+   * @param streamApp  the user-defined {@link StreamApplication} object
+   */
 
   @Override
   public void kill(StreamApplication streamApp) {
@@ -205,46 +256,16 @@ public class LocalApplicationRunner extends AbstractApplicationRunner {
    * If {@link CoordinationUtils} is provided, this function will first invoke leader election, and the leader
    * will create the streams. All the runner processes will wait on the latch that is released after the leader finishes
    * stream creation.
-   * @param planId a unique identifier representing the plan used for coordination purpose
    * @param intStreams list of intermediate {@link StreamSpec}s
    * @throws TimeoutException exception for latch timeout
    */
-  /* package private */ void createStreams(String planId, List<StreamSpec> intStreams) throws TimeoutException {
+  /* package private */ void createStreams( List<StreamSpec> intStreams) throws TimeoutException {
     if (intStreams.isEmpty()) {
       LOG.info("Set of intermediate streams is empty. Nothing to create.");
       return;
     }
-    LOG.info("A single processor must create the intermediate streams. Processor {} will attempt to acquire the lock.", uid);
-    // Move the scope of coordination utils within stream creation to address long idle connection problem.
-    // Refer SAMZA-1385 for more details
-    JobCoordinatorConfig jcConfig = new JobCoordinatorConfig(config);
-    String coordinationId = new ApplicationConfig(config).getGlobalAppId() + APPLICATION_RUNNER_PATH_SUFFIX;
-    CoordinationUtils coordinationUtils =
-        jcConfig.getCoordinationUtilsFactory().getCoordinationUtils(coordinationId, uid, config);
-    if (coordinationUtils == null) {
-      LOG.warn("Processor {} failed to create utils. Each processor will attempt to create streams.", uid);
-      // each application process will try creating the streams, which
-      // requires stream creation to be idempotent
-      getStreamManager().createStreams(intStreams);
-      return;
-    }
-
-    DistributedLockWithState lockWithState = coordinationUtils.getLockWithState(planId);
-    try {
-      // check if the processor needs to go through leader election and stream creation
-      if (lockWithState.lockIfNotSet(1000, TimeUnit.MILLISECONDS)) {
-        LOG.info("lock acquired for streams creation by " + uid);
-        getStreamManager().createStreams(intStreams);
-        lockWithState.unlockAndSet();
-      } else {
-        LOG.info("Processor {} did not obtain the lock for streams creation. They must've been created by another processor.", uid);
-      }
-    } catch (TimeoutException e) {
-      String msg = String.format("Processor {} failed to get the lock for stream initialization", uid);
-      throw new SamzaException(msg, e);
-    } finally {
-      coordinationUtils.close();
-    }
+    LOG.info("lock acquired for streams creation by " + uid);
+    getStreamManager().createStreams(intStreams);
   }
 
   /**

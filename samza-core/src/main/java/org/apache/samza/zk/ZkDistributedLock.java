@@ -18,12 +18,15 @@
  */
 package org.apache.samza.zk;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.apache.samza.SamzaException;
+import org.apache.samza.config.Config;
 import org.apache.samza.coordinator.DistributedLockWithState;
+import org.apache.samza.coordinator.LockCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,13 +43,17 @@ public class ZkDistributedLock implements DistributedLockWithState {
   private final String participantId;
   private final ZkKeyBuilder keyBuilder;
   private final Random random = new Random();
+  private final RunIdGenerator runIdGenerator;
+  private final Config config;
   private String nodePath = null;
   private final String statePath;
 
-  public ZkDistributedLock(String participantId, ZkUtils zkUtils, String lockId) {
+  public ZkDistributedLock(String participantId, ZkUtils zkUtils, String lockId, RunIdGenerator runIdGenerator, Config config) {
     this.zkUtils = zkUtils;
     this.participantId = participantId;
     this.keyBuilder = zkUtils.getKeyBuilder();
+    this.runIdGenerator = runIdGenerator;
+    this.config = config;
     lockPath = String.format("%s/stateLock_%s", keyBuilder.getRootPath(), lockId);
     statePath = String.format("%s/%s_%s", lockPath, STATE_INITED, lockId);
     zkUtils.validatePaths(new String[] {lockPath});
@@ -60,21 +67,18 @@ public class ZkDistributedLock implements DistributedLockWithState {
    * @return true if lock is acquired successfully, false if it times out.
    */
   @Override
-  public boolean lockIfNotSet(long timeout, TimeUnit unit)
+  public LockResponse lockIfNotSet(long timeout, TimeUnit unit)
       throws TimeoutException {
 
-    nodePath = zkUtils.getZkClient().createEphemeralSequential(lockPath + "/", participantId);
+    nodePath = zkUtils.getZkClient().createEphemeralSequential(lockPath + "/", null);
 
     //Start timer for timeout
     long startTime = System.currentTimeMillis();
     long lockTimeout = TimeUnit.MILLISECONDS.convert(timeout, unit);
 
+    // TODO: refactor them into smaller sub methods.
+    ZkNodeData zkNodeData = null;
     while ((System.currentTimeMillis() - startTime) < lockTimeout) {
-
-      if (zkUtils.getZkClient().exists(statePath)) {
-        // state already set, no point locking
-        return false;
-      }
 
       List<String> children = zkUtils.getZkClient().getChildren(lockPath);
       int index = children.indexOf(ZkKeyBuilder.parseIdFromPath(nodePath));
@@ -85,8 +89,25 @@ public class ZkDistributedLock implements DistributedLockWithState {
       // Acquires lock when the node has the lowest sequence number and returns.
       if (index == 0) {
         LOG.info("Acquired lock for participant id: {}", participantId);
-        return true;
+        ZkNodeData existingZkNodeData = zkUtils.getZkClient().readData(nodePath);
+        if (existingZkNodeData == null || existingZkNodeData.getRunId() == null) {
+          // Generate run.id by leader.
+          String runId = runIdGenerator.generateRunId(config);
+          zkNodeData = new ZkNodeData(runId, participantId);
+          zkUtils.writeData(nodePath, zkNodeData);
+          return new LockResponse(runId, true);
+        } else {
+          return new LockResponse(existingZkNodeData.getRunId(), true);
+        }
       } else {
+        // Read run.id by leader and store it in the follower's node.
+        Collections.sort(children);
+        String leaderPath = children.get(0);
+        ZkNodeData leaderZkNodeData = zkUtils.getZkClient().readData(leaderPath);
+        if (leaderZkNodeData != null) {
+          zkNodeData = new ZkNodeData(leaderZkNodeData.getRunId(), participantId);
+          zkUtils.writeData(nodePath, zkNodeData);
+        }
         try {
           Thread.sleep(random.nextInt(1000));
         } catch (InterruptedException e) {
@@ -95,7 +116,12 @@ public class ZkDistributedLock implements DistributedLockWithState {
         LOG.info("Trying to acquire lock again...");
       }
     }
-    throw new TimeoutException("could not acquire lock for " + timeout + " " + unit.toString());
+    if (zkNodeData != null) {
+      return new LockResponse(zkNodeData.getRunId(), false);
+    } else {
+      // TODO: update the exception message.
+      throw new TimeoutException("could not acquire lock for " + timeout + " " + unit.toString());
+    }
   }
 
   /**
@@ -112,6 +138,24 @@ public class ZkDistributedLock implements DistributedLockWithState {
       LOG.info("Ephemeral lock node deleted. Unlocked!");
     } else {
       LOG.warn("Ephemeral lock node you want to delete doesn't exist");
+    }
+  }
+
+  private static class ZkNodeData {
+    String runId;
+    String participantId;
+
+    ZkNodeData(String runId, String participantId) {
+      this.runId = runId;
+      this.participantId = participantId;
+    }
+
+    String getRunId() {
+      return runId;
+    }
+
+    String getParticipantId() {
+      return participantId;
     }
   }
 }
