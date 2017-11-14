@@ -33,9 +33,13 @@ public class LocalStoreMonitorMetrics extends MetricsBase {
   /** Total disk space cleared by the LocalStoreMonitor. */
   public final Counter diskSpaceFreedInBytes;
 
+  /** Total exceptions occurred during the store GC. */
+  public final Counter storeGCExceptionCount;
+
   public LocalStoreMonitorMetrics(String prefix, MetricsRegistry registry) {
     super(prefix, registry);
     diskSpaceFreedInBytes = newCounter("diskSpaceFreedInBytes");
     noOfDeletedTaskPartitionStores = newCounter("noOfDeletedTaskPartitionStores");
+    storeGCExceptionCount = newCounter("storeGCExceptionCount");
   }
 }
