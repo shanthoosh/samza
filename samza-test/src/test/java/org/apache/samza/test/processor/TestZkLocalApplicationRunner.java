@@ -438,6 +438,11 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
 
   @Test
   public void shouldFailWhenNewProcessorJoinsWithSameIdAsExistingProcessor() throws InterruptedException {
+    System.out.println("HO HO HO!");
+    for (KafkaServer server : JavaConverters.bufferAsJavaListConverter(servers()).asJava()) {
+      System.out.println(server);
+    }
+
     // Set up kafka topics.
     publishKafkaEvents(inputKafkaTopic, NUM_KAFKA_EVENTS, PROCESSOR_IDS[0]);
 

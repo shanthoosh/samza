@@ -23,7 +23,6 @@ import java.util.concurrent.CountDownLatch;
 import org.junit.Assert;
 import org.junit.Test;
 
-
 /**
  * Happy path tests.
  * Start 1, 2, 5 processors and make sure they all consume all the events.
@@ -170,7 +169,7 @@ public class TestZkStreamProcessor extends TestZkStreamProcessorBase {
     verifyNumMessages(outputTopic, 2 * messageCount, totalEventsToGenerate);
   }
 
-  //@Test
+  @Test
   /**
    * same as other happy path messages, but with one processor removed in the middle
    */ public void testStreamProcessorWithRemove() {

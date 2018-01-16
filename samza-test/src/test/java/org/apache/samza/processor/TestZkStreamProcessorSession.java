@@ -38,7 +38,7 @@ public class TestZkStreamProcessorSession extends TestZkStreamProcessorBase {
     return "test_ZKS_";
   }
 
-  //@Test
+  @Test
   public void testSingleStreamProcessor() {
     testStreamProcessorWithSessionRestart(new String[]{"1"});
   }
@@ -49,7 +49,7 @@ public class TestZkStreamProcessorSession extends TestZkStreamProcessorBase {
     testStreamProcessorWithSessionRestart(new String[]{"2", "3"});
   }
 
-  //@Test
+  @Test
   public void testFiveStreamProcessors() {
     testStreamProcessorWithSessionRestart(new String[]{"4", "5", "6", "7", "8"});
   }
