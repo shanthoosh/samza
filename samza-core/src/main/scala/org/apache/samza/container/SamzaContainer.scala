@@ -680,7 +680,8 @@ class SamzaContainer(
     try {
       info("Starting container.")
 
-      val startTime = System.nanoTime()
+      val startTime = System.currentTimeMillis()
+      println(s"RebalanceMeasure: Startup sequence of the container: ${containerContext.id} is started at: $startTime.")
       status = SamzaContainerStatus.STARTING
 
       jmxServer = new JmxServer()
@@ -703,6 +704,9 @@ class SamzaContainer(
       if (containerListener != null) {
         containerListener.onContainerStart()
       }
+      val endTime = System.currentTimeMillis()
+      println(s"RebalanceMeasure: Startup sequence of the container: ${containerContext.id} is end at: $endTime.")
+      println(s"RebalanceMeasure: Total container startup time for container id: ${containerContext.id} is =" + (endTime - startTime))
       metrics.containerStartupTime.update(System.nanoTime() - startTime)
       runLoop.run
     } catch {
@@ -719,6 +723,9 @@ class SamzaContainer(
     try {
       info("Shutting down.")
       removeShutdownHook
+
+      val startTime = System.currentTimeMillis()
+      println(s"RebalanceMeasure: Shutdown sequence of the container: ${containerContext.id} is started at: $startTime.")
 
       jmxServer.stop
 
@@ -737,7 +744,9 @@ class SamzaContainer(
       if (!status.equals(SamzaContainerStatus.FAILED)) {
         status = SamzaContainerStatus.STOPPED
       }
-
+      val endTime = System.currentTimeMillis()
+      println(s"RebalanceMeasure: Shutdown sequence of the container: ${containerContext.id} is end at: $endTime.")
+      println(s"RebalanceMeasure: Total container shutdown time for container: ${containerContext.id} is =" + (endTime - startTime))
       info("Shutdown complete.")
     } catch {
       case e: Throwable =>
