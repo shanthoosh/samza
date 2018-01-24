@@ -24,11 +24,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import kafka.admin.AdminUtils;
-import kafka.server.KafkaServer;
 import kafka.utils.TestUtils;
 import org.I0Itec.zkclient.ZkClient;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.samza.SamzaException;
 import org.apache.samza.application.StreamApplication;
@@ -62,7 +60,6 @@ import org.junit.rules.ExpectedException;
 import org.junit.rules.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.collection.JavaConverters;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -160,7 +157,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
       TestUtils.createTopic(zkUtils(), kafkaTopic, 1, 1, servers(), new Properties());
     }
     final long setUpEndTimeInMillis = System.currentTimeMillis();
-    LOGGER.info(String.format("Total time taken by setup phase: %d", (setUpEndTimeInMillis - setUpStartTimeInMillis)));
+    LOGGER.info(String.format("Total time taken by setup phase: %d", setUpEndTimeInMillis - setUpStartTimeInMillis));
   }
 
   @Override
@@ -179,7 +176,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
       super.tearDown();
     }
     final long tearDownEndTimeInMillis = System.currentTimeMillis();
-    LOGGER.info(String.format("Total time taken by teardown phase: %d", (tearDownEndTimeInMillis - tearDownStartTimeInMillis)));
+    LOGGER.info(String.format("Total time taken by teardown phase: %d", tearDownEndTimeInMillis - tearDownStartTimeInMillis));
   }
 
   private void publishKafkaEvents(String topic, int numEvents, String streamProcessorId) {

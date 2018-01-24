@@ -431,6 +431,7 @@ public class ZkUtils {
       metrics.reads.inc(publishedJobModelVersions.size());
       String maxPublishedJMVersion = publishedJobModelVersions.stream()
                                                               .max(Comparator.comparingInt(Integer::valueOf)).orElse("0");
+      LOG.info("CurrentJobModelVersion= " + currentJobModelVersion + " maxPublishedJobModelVersion=" + maxPublishedJMVersion);
       return Integer.toString(Math.max(Integer.valueOf(currentJobModelVersion), Integer.valueOf(maxPublishedJMVersion)) + 1);
     }
   }
