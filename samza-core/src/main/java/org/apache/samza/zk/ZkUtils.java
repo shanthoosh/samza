@@ -197,9 +197,14 @@ public class ZkUtils {
     return processorZNodes.stream()
                           .map(processorZNode -> {
                               String ephemeralProcessorPath = String.format("%s/%s", keyBuilder.getProcessorsPath(), processorZNode);
-                              String data = readProcessorData(ephemeralProcessorPath);
-                              return new ProcessorNode(new ProcessorData(data), ephemeralProcessorPath);
-                            }).collect(Collectors.toList());
+                              try {
+                                String data = readProcessorData(ephemeralProcessorPath);
+                                return new ProcessorNode(new ProcessorData(data), ephemeralProcessorPath);
+                              } catch (Exception e) {
+                                LOG.error(String.format("Reading processor data from path: %s failed.", ephemeralProcessorPath), e);
+                                return null;
+                              }
+                            }).filter(Objects::nonNull).collect(Collectors.toList());
   }
 
   /**
@@ -226,9 +231,7 @@ public class ZkUtils {
   String readProcessorData(String fullPath) {
     try {
       String data = zkClient.readData(fullPath, false);
-      if (metrics != null) {
-        metrics.reads.inc();
-      }
+      metrics.reads.inc();
       return data;
     } catch (Exception e) {
       throw new SamzaException(String.format("Cannot read ZK node: %s", fullPath), e);
@@ -254,7 +257,11 @@ public class ZkUtils {
     if (znodeIds.size() > 0) {
       for (String child : znodeIds) {
         String fullPath = String.format("%s/%s", processorPath, child);
-        processorIds.add(new ProcessorData(readProcessorData(fullPath)).getProcessorId());
+        try {
+          processorIds.add(new ProcessorData(readProcessorData(fullPath)).getProcessorId());
+        } catch (Exception e) {
+          LOG.error(String.format("Reading zookeeper node: %s failed with an exception.", fullPath), e);
+        }
       }
       Collections.sort(processorIds);
       LOG.info("Found these children - " + znodeIds);
@@ -270,16 +277,12 @@ public class ZkUtils {
 
   public void subscribeDataChanges(String path, IZkDataListener dataListener) {
     zkClient.subscribeDataChanges(path, dataListener);
-    if (metrics != null) {
-      metrics.subscriptions.inc();
-    }
+    metrics.subscriptions.inc();
   }
 
   public void subscribeChildChanges(String path, IZkChildListener listener) {
     zkClient.subscribeChildChanges(path, listener);
-    if (metrics != null) {
-      metrics.subscriptions.inc();
-    }
+    metrics.subscriptions.inc();
   }
 
   public void unsubscribeChildChanges(String path, IZkChildListener childListener) {
@@ -288,17 +291,20 @@ public class ZkUtils {
 
   public void writeData(String path, Object object) {
     zkClient.writeData(path, object);
-    if (metrics != null) {
-      metrics.writes.inc();
-    }
+    metrics.writes.inc();
   }
 
   public boolean exists(String path) {
     return zkClient.exists(path);
   }
 
-  public void close() throws ZkInterruptedException {
-    zkClient.close();
+  public void close() {
+    try {
+      zkClient.close();
+    } catch (ZkInterruptedException e) {
+      // Swallowed, since it occurred in final stage of lifecycle.
+      LOG.error("Exception on closing zkclient", e);
+    }
   }
 
   /**

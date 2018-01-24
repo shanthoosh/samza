@@ -19,6 +19,7 @@
 
 package org.apache.samza.zk;
 
+import org.I0Itec.zkclient.exception.ZkInterruptedException;
 import org.apache.samza.SamzaException;
 import org.apache.samza.coordinator.LeaderElector;
 import org.slf4j.Logger;
@@ -89,7 +90,11 @@ public class ZkControllerImpl implements ZkController {
 
     // close zk connection
     if (zkUtils != null) {
-      zkUtils.getZkClient().close();
+      try {
+        zkUtils.getZkClient().close();
+      } catch (ZkInterruptedException e) {
+        LOG.error("Exception on closing zkClient", e);
+      }
     }
   }
 
