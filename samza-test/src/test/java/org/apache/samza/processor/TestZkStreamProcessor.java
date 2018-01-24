@@ -21,6 +21,7 @@ package org.apache.samza.processor;
 
 import java.util.concurrent.CountDownLatch;
 import org.junit.Assert;
+import org.junit.Test;
 
 
 /**
@@ -34,17 +35,17 @@ public class TestZkStreamProcessor extends TestZkStreamProcessorBase {
     return "test_ZK_";
   }
 
-  //@Test
+  @Test
   public void testSingleStreamProcessor() {
     testStreamProcessor(new String[]{"1"});
   }
 
-  //@Test
+  @Test
   public void testTwoStreamProcessors() {
     testStreamProcessor(new String[]{"2", "3"});
   }
 
-  //@Test
+  @Test
   public void testFiveStreamProcessors() {
     testStreamProcessor(new String[]{"4", "5", "6", "7", "8"});
   }
@@ -97,7 +98,7 @@ public class TestZkStreamProcessor extends TestZkStreamProcessorBase {
     verifyNumMessages(outputTopic, messageCount, messageCount);
   }
 
-  //@Test
+  @Test
   /**
    * Similar to the previous tests, but add another processor in the middle
    */ public void testStreamProcessorWithAdd() {
