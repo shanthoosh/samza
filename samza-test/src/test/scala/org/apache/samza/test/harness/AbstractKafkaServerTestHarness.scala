@@ -72,7 +72,11 @@ abstract class AbstractKafkaServerTestHarness extends AbstractZookeeperTestHarne
     if (configs.size <= 0)
       throw new KafkaException("Must supply at least one server config.")
     servers = configs.map(TestUtils.createServer(_)).toBuffer
+    println("Kafka servers")
+    servers.foreach(server => println(server))
     brokerList = TestUtils.getBrokerListStrFromServers(servers, securityProtocol)
+    println("Brokers list")
+    brokerList.foreach(broker => println(broker))
     alive = new Array[Boolean](servers.length)
     util.Arrays.fill(alive, true)
     // We need to set a cluster ACL in some cases here

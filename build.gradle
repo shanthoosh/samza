@@ -724,6 +724,7 @@ project(":samza-rest") {
 
 project(":samza-test_$scalaVersion") {
   apply plugin: 'scala'
+  apply plugin: 'java'
   apply plugin: 'checkstyle'
 
   // Force scala joint compilation
@@ -772,6 +773,7 @@ project(":samza-test_$scalaVersion") {
     minHeapSize = "1560m"
     maxHeapSize = "1560m"
     jvmArgs = ["-XX:+UseConcMarkSweepGC", "-server"]
+    testLogging.showStandardStreams = true
   }
 
   checkstyle {
