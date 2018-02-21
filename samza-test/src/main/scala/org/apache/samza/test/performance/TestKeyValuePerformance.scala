@@ -20,7 +20,6 @@
 package org.apache.samza.test.performance
 
 import java.io.File
-import java.util
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 

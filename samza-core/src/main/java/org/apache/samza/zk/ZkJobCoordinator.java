@@ -26,17 +26,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
+import com.google.common.collect.ImmutableMap;
 import org.I0Itec.zkclient.IZkStateListener;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.samza.checkpoint.CheckpointManager;
-import org.apache.samza.config.ApplicationConfig;
-import org.apache.samza.config.Config;
-import org.apache.samza.config.ConfigException;
-import org.apache.samza.config.JobConfig;
-import org.apache.samza.config.MetricsConfig;
-import org.apache.samza.config.TaskConfigJava;
-import org.apache.samza.config.ZkConfig;
+import org.apache.samza.config.*;
+import org.apache.samza.container.LocalityManager;
 import org.apache.samza.container.TaskName;
+import org.apache.samza.container.grouper.task.TaskAssignmentManager;
 import org.apache.samza.coordinator.JobCoordinator;
 import org.apache.samza.coordinator.JobCoordinatorListener;
 import org.apache.samza.coordinator.JobModelManager;
@@ -47,6 +45,9 @@ import org.apache.samza.job.model.JobModel;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.metrics.MetricsReporter;
 import org.apache.samza.metrics.ReadableMetricsRegistry;
+import org.apache.samza.runtime.LocationId;
+import org.apache.samza.runtime.LocationIdProvider;
+import org.apache.samza.runtime.LocationIdProviderFactory;
 import org.apache.samza.runtime.ProcessorIdGenerator;
 import org.apache.samza.storage.ChangelogStreamManager;
 import org.apache.samza.system.StreamMetadataCache;
@@ -54,6 +55,7 @@ import org.apache.samza.system.SystemAdmins;
 import org.apache.samza.util.ClassLoaderHelper;
 import org.apache.samza.util.MetricsReporterLoader;
 import org.apache.samza.util.SystemClock;
+import org.apache.samza.util.Util;
 import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +91,10 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   private final ZkBarrierForVersionUpgrade barrier;
   private final ZkJobCoordinatorMetrics metrics;
   private final Map<String, MetricsReporter> reporters;
+  private final MetricsRegistry metricsRegistry;
+  private final LocationId locationId;
+  private final TaskAssignmentManager taskAssignmentManager;
+  private final LocalityManager localityManager;
 
   private StreamMetadataCache streamMetadataCache = null;
   private SystemAdmins systemAdmins = null;
@@ -102,8 +108,8 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
 
   ZkJobCoordinator(Config config, MetricsRegistry metricsRegistry, ZkUtils zkUtils) {
     this.config = config;
-
     this.metrics = new ZkJobCoordinatorMetrics(metricsRegistry);
+    this.metricsRegistry = metricsRegistry;
 
     this.processorId = createProcessorId(config);
     this.zkUtils = zkUtils;
@@ -126,6 +132,11 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       });
     systemAdmins = new SystemAdmins(config);
     streamMetadataCache = new StreamMetadataCache(systemAdmins, METADATA_CACHE_TTL_MS, SystemClock.instance());
+    LocationIdProviderFactory locationIdProviderFactory = Util.getObj(new JobConfig(config).getLocationIdProviderFactory());
+    LocationIdProvider locationIdProvider = locationIdProviderFactory.getLocationIdProvider();
+    this.locationId = locationIdProvider.getLocationId(config);
+    this.taskAssignmentManager = new TaskAssignmentManager(config, metricsRegistry);
+    this.localityManager = new LocalityManager(config, metricsRegistry);
   }
 
   @Override
@@ -268,6 +279,12 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     if (coordinatorListener != null) {
       coordinatorListener.onNewJobModel(processorId, jobModel);
     }
+
+    for (ContainerModel containerModel : jobModel.getContainers().values()) {
+      for (TaskName taskName : containerModel.getTasks().keySet()) {
+        taskAssignmentManager.writeTaskLocality(taskName, locationId);
+      }
+    }
   }
 
   private String createProcessorId(Config config) {
@@ -310,11 +327,17 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       }
       cachedJobModelVersion = zkJobModelVersion;
     }
-    /**
-     * Host affinity is not supported in standalone. Hence, LocalityManager(which is responsible for container
-     * to host mapping) is passed in as null when building the jobModel.
-     */
-    return JobModelManager.readJobModel(this.config, changeLogPartitionMap, null, streamMetadataCache, processors);
+
+    Map<TaskName, LocationId> taskLocality = taskAssignmentManager.readTaskLocality();
+    Map<String, Map<String, String>> containerLocality = localityManager.readContainerLocality();
+
+    Map<String, LocationId> containerToLocationId = new HashMap<>();
+    containerLocality.forEach((containerId, localityMap) -> {
+        containerToLocationId.put(containerId, new LocationId(localityMap.get("host")));
+      });
+
+    MapConfig jobModelConfig = new MapConfig(this.config, ImmutableMap.of(JobConfig.JOB_CONTAINER_COUNT(), String.valueOf(processors.size())));
+    return JobModelManager.readJobModel(jobModelConfig, changeLogPartitionMap, null, streamMetadataCache, processors, metricsRegistry, locationId, containerToLocationId, taskLocality);
   }
 
   class LeaderElectorListenerImpl implements LeaderElectorListener {

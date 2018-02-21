@@ -26,6 +26,8 @@ import org.apache.samza.coordinator.server.HttpServer;
 import org.apache.samza.job.model.ContainerModel;
 import org.apache.samza.job.model.JobModel;
 import org.apache.samza.job.model.TaskModel;
+import org.apache.samza.metrics.MetricsRegistryMap;
+import org.apache.samza.runtime.LocationId;
 import org.apache.samza.system.StreamMetadataCache;
 
 import java.util.ArrayList;
@@ -58,9 +60,7 @@ public class JobModelManagerTestUtil {
     for (int i = 0; i < containerCount; i++) {
       containerIds.add(String.valueOf(i));
     }
-    JobModel jobModel = JobModelManager.readJobModel(config, new HashMap<>(), locManager, streamMetadataCache, containerIds);
+    JobModel jobModel = JobModelManager.readJobModel(config, new HashMap<>(), locManager, streamMetadataCache, containerIds, new MetricsRegistryMap(), new LocationId("0"), new HashMap<>(), new HashMap<>());
     return new JobModelManager(jobModel, server);
   }
-
-
 }

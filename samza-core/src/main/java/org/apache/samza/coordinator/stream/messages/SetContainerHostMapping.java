@@ -51,7 +51,7 @@ public class SetContainerHostMapping extends CoordinatorStreamMessage {
   }
 
   /**
-   * SteContainerToHostMapping is used to set the container to host mapping information.
+   * SetContainerToHostMapping is used to set the container to host mapping information.
    * @param source the source of the message
    * @param key the key which is used to persist the message
    * @param hostName the hostname of the container

@@ -29,19 +29,19 @@ import org.apache.samza.config.SystemConfig.Config2System
 import org.apache.samza.config.TaskConfig.Config2Task
 import org.apache.samza.config.Config
 import org.apache.samza.container.grouper.stream.SystemStreamPartitionGrouperFactory
-import org.apache.samza.container.grouper.task.BalancingTaskNameGrouper
-import org.apache.samza.container.grouper.task.TaskNameGrouperFactory
+import org.apache.samza.container.grouper.task.{BalancingTaskNameGrouper, TaskAssignmentManager, TaskNameGrouperFactory}
 import org.apache.samza.container.LocalityManager
 import org.apache.samza.container.TaskName
 import org.apache.samza.coordinator.server.HttpServer
 import org.apache.samza.coordinator.server.JobServlet
 import org.apache.samza.coordinator.stream.CoordinatorStreamManager
-import org.apache.samza.job.model.JobModel
-import org.apache.samza.job.model.TaskModel
+import org.apache.samza.job.model.{ContainerModel, JobModel, TaskModel}
+import org.apache.samza.metrics.{MetricsRegistry, MetricsRegistryMap}
 import org.apache.samza.system._
 import org.apache.samza.util.Logging
 import org.apache.samza.util.Util
 import org.apache.samza.Partition
+import org.apache.samza.runtime.{LocationId, LocationIdProvider, LocationIdProviderFactory}
 
 import scala.collection.JavaConverters._
 
@@ -68,11 +68,36 @@ object JobModelManager extends Logging {
    * @return JobModelManager
    */
   def apply(coordinatorStreamManager: CoordinatorStreamManager, changelogPartitionMapping: util.Map[TaskName, Integer]) = {
-    val localityManager = new LocalityManager(coordinatorStreamManager)
-
     val config = coordinatorStreamManager.getConfig
+    val localityManager = new LocalityManager(config, new MetricsRegistryMap())
 
-      // Map the name of each system to the corresponding SystemAdmin
+    val containerLocality: util.Map[String, util.Map[String, String]] = localityManager.readContainerLocality()
+    val containerIdToLocationId: util.Map[String, LocationId]  = new util.HashMap[String, LocationId]()
+
+    if (config.getContainerCount != containerLocality.size()) {
+      for (containerId <- 1 to config.getContainerCount) {
+        val containerIdStr = String.valueOf(containerId)
+        if (containerLocality.containsKey(containerIdStr)) {
+          val hostLocality: util.Map[String, String] = containerLocality.get(containerIdStr)
+          val host: String = hostLocality.get("host")
+          containerIdToLocationId.put(containerIdStr, new LocationId(host))
+        } else {
+          containerIdToLocationId.put(containerIdStr, new LocationId("ANY_HOST"))
+        }
+      }
+    }
+
+    val taskAssignment: util.Map[String, String] = localityManager.getTaskAssignmentManager.readTaskAssignment()
+    val taskLocality: util.Map[TaskName, LocationId] = new util.HashMap[TaskName, LocationId]()
+    for ((taskName, containerId) <- taskAssignment.asScala) {
+      taskLocality.put(new TaskName(taskName), containerIdToLocationId.get(containerId))
+    }
+
+    val locationIdProviderFactory: LocationIdProviderFactory = Util.getObj(config.getLocationIdProviderFactory)
+    val locationIdProvider: LocationIdProvider = locationIdProviderFactory.getLocationIdProvider
+    val locationId: LocationId = locationIdProvider.getLocationId(config)
+
+    // Map the name of each system to the corresponding SystemAdmin
     val systemAdmins = new SystemAdmins(config)
     val streamMetadataCache = new StreamMetadataCache(systemAdmins, 0)
 
@@ -80,7 +105,7 @@ object JobModelManager extends Logging {
     val processorList = List.range(0, containerCount).map(c => c.toString)
 
     systemAdmins.start()
-    val jobModelManager = getJobModelManager(config, changelogPartitionMapping, localityManager, streamMetadataCache, processorList.asJava)
+    val jobModelManager = getJobModelManager(config, changelogPartitionMapping, localityManager, streamMetadataCache, processorList.asJava, locationId, containerIdToLocationId, taskLocality)
     systemAdmins.stop()
 
     jobModelManager
@@ -90,11 +115,14 @@ object JobModelManager extends Logging {
    * Build a JobModelManager using a Samza job's configuration.
    */
   private def getJobModelManager(config: Config,
-                                changeLogMapping: util.Map[TaskName, Integer],
-                                localityManager: LocalityManager,
-                                streamMetadataCache: StreamMetadataCache,
-                                containerIds: java.util.List[String]) = {
-    val jobModel: JobModel = readJobModel(config, changeLogMapping, localityManager, streamMetadataCache, containerIds)
+                                 changeLogMapping: util.Map[TaskName, Integer],
+                                 localityManager: LocalityManager,
+                                 streamMetadataCache: StreamMetadataCache,
+                                 containerIds: java.util.List[String],
+                                 locationId: LocationId = new LocationId(Util.getLocalHost.getHostName),
+                                 containerLocality: util.Map[String, LocationId] = new util.HashMap[String, LocationId](),
+                                 taskLocality: util.Map[TaskName, LocationId] = new util.HashMap[TaskName, LocationId]()) = {
+    val jobModel: JobModel = readJobModel(config, changeLogMapping, localityManager, streamMetadataCache, containerIds, new MetricsRegistryMap(), locationId)
     jobModelRef.set(jobModel)
 
     val server = new HttpServer
@@ -161,7 +189,11 @@ object JobModelManager extends Logging {
                    changeLogPartitionMapping: util.Map[TaskName, Integer],
                    localityManager: LocalityManager,
                    streamMetadataCache: StreamMetadataCache,
-                   containerIds: java.util.List[String]): JobModel = {
+                   containerIds: java.util.List[String],
+                   metricsRegistry: MetricsRegistry,
+                   locationId: LocationId = new LocationId(Util.getLocalHost.getHostName),
+                   processorLocality: util.Map[String, LocationId] = new util.HashMap[String, LocationId](),
+                   taskLocality: util.Map[TaskName, LocationId] = new util.HashMap[TaskName, LocationId]()): JobModel = {
     // Do grouping to fetch TaskName to SSP mapping
     val allSystemStreamPartitions = getMatchedInputStreamPartitions(config, streamMetadataCache)
 
@@ -201,19 +233,45 @@ object JobModelManager extends Logging {
     // Here is where we should put in a pluggable option for the
     // SSPTaskNameGrouper for locality, load-balancing, etc.
     val containerGrouperFactory = Util.getObj[TaskNameGrouperFactory](config.getTaskNameGrouperFactory)
-    val containerGrouper = containerGrouperFactory.build(config)
+    val containerGrouper = containerGrouperFactory.build(new MapConfig(configMap))
     val containerModels = {
       containerGrouper match {
         case grouper: BalancingTaskNameGrouper if isHostAffinityEnabled => grouper.balance(taskModels.asJava, localityManager)
-        case _ => containerGrouper.group(taskModels.asJava, containerIds)
+        case _ =>
+
+          if (taskLocality.size != taskModels.size) {
+            // If the tasks changed, then the partition-task grouping is also likely changed and we can't handle that
+            // without a much more complicated mapping. Further, the partition count may have changed, which means
+            // input message keys are likely reshuffled w.r.t. partitions, so the local state may not contain necessary
+            // data associated with the incoming keys. Warn the user and default to grouper
+            // In this scenario the tasks may have been reduced, so we need to delete all the existing messages
+            if (localityManager != null) {
+              localityManager.getTaskAssignmentManager.deleteTaskMappings(taskLocality.keySet().iterator())
+            }
+          }
+          info("Generating containerModels with taskLocality: {}, processorLocality: {} and taskModels: {}.", taskLocality, processorLocality, taskModels)
+          containerGrouper.group(taskModels.asJava, processorLocality)
       }
     }
+    saveContainerModels(localityManager, containerModels)
+
     val containerMap = containerModels.asScala.map { case (containerModel) => containerModel.getProcessorId -> containerModel }.toMap
 
     if (isHostAffinityEnabled) {
       new JobModel(config, containerMap.asJava, localityManager)
     } else {
       new JobModel(config, containerMap.asJava)
+    }
+  }
+
+  private def saveContainerModels(localityManager: LocalityManager, containerModels: util.Set[ContainerModel]) = {
+    if (localityManager != null) {
+      val taskAssignmentManager: TaskAssignmentManager = localityManager.getTaskAssignmentManager
+      for (container <- containerModels.asScala) {
+        for (taskName <- container.getTasks.keySet.asScala) {
+          taskAssignmentManager.writeTaskContainerMapping(taskName.getTaskName, container.getProcessorId)
+        }
+      }
     }
   }
 

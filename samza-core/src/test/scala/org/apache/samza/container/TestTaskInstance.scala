@@ -47,7 +47,6 @@ import org.mockito.Mockito
 import org.mockito.Mockito._
 import org.scalatest.Assertions.intercept
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConverters._
 

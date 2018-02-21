@@ -27,6 +27,7 @@ import org.apache.samza.coordinator.stream.MockCoordinatorStreamSystemFactory.Mo
 import org.apache.samza.coordinator.stream.MockCoordinatorStreamSystemFactory.MockCoordinatorStreamSystemProducer;
 import org.apache.samza.coordinator.stream.messages.CoordinatorStreamMessage;
 import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping;
+import org.apache.samza.metrics.MetricsRegistryMap;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -68,7 +69,7 @@ public class TestLocalityManager {
     MockCoordinatorStreamSystemConsumer consumer =
         mockCoordinatorStreamSystemFactory.getCoordinatorStreamSystemConsumer(config, null);
     CoordinatorStreamManager coordinatorStreamManager = new CoordinatorStreamManager(producer, consumer);
-    LocalityManager localityManager = new LocalityManager(coordinatorStreamManager);
+    LocalityManager localityManager = new LocalityManager(new MapConfig(), new MetricsRegistryMap());
 
     coordinatorStreamManager.register("SamzaContainer-containerId-0");
     assertTrue(producer.isRegistered());
@@ -105,7 +106,7 @@ public class TestLocalityManager {
     MockCoordinatorStreamSystemProducer producer =
         mockCoordinatorStreamSystemFactory.getCoordinatorStreamSystemProducer(config, null);
     CoordinatorStreamManager coordinatorStreamManager = new CoordinatorStreamManager(producer);
-    LocalityManager localityManager = new LocalityManager(coordinatorStreamManager);
+    LocalityManager localityManager = new LocalityManager(new MapConfig(), new MetricsRegistryMap());
 
     coordinatorStreamManager.register("SamzaContainer-containerId-1");
     assertTrue(producer.isRegistered());

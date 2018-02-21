@@ -28,6 +28,10 @@ import org.apache.samza.coordinator.JobCoordinator;
 import org.apache.samza.coordinator.JobModelManager;
 import org.apache.samza.job.model.JobModel;
 import org.apache.samza.coordinator.JobCoordinatorListener;
+import org.apache.samza.metrics.MetricsRegistryMap;
+import org.apache.samza.runtime.LocationId;
+import org.apache.samza.runtime.LocationIdProvider;
+import org.apache.samza.runtime.LocationIdProviderFactory;
 import org.apache.samza.runtime.ProcessorIdGenerator;
 import org.apache.samza.system.StreamMetadataCache;
 import org.apache.samza.system.SystemAdmins;
@@ -36,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
+import java.util.HashMap;
 
 /**
  * Standalone Job Coordinator does not implement any leader elector module or cluster manager
@@ -64,11 +69,15 @@ public class PassthroughJobCoordinator implements JobCoordinator {
   private static final Logger LOGGER = LoggerFactory.getLogger(PassthroughJobCoordinator.class);
   private final String processorId;
   private final Config config;
+  private final LocationId locationId;
   private JobCoordinatorListener coordinatorListener = null;
 
   public PassthroughJobCoordinator(Config config) {
     this.processorId = createProcessorId(config);
     this.config = config;
+    LocationIdProviderFactory locationIdProviderFactory = Util.getObj(new JobConfig(config).getLocationIdProviderFactory());
+    LocationIdProvider locationIdProvider = locationIdProviderFactory.getLocationIdProvider();
+    this.locationId = locationIdProvider.getLocationId(config);
   }
 
   @Override
@@ -124,7 +133,7 @@ public class PassthroughJobCoordinator implements JobCoordinator {
      (job.coordinator.task.grouper, instead of task.systemstreampartition.grouper)
      */
     JobModel jobModel = JobModelManager.readJobModel(this.config, Collections.emptyMap(), null, streamMetadataCache,
-        Collections.singletonList(containerId));
+        Collections.singletonList(containerId), new MetricsRegistryMap(), this.locationId, new HashMap<>(), new HashMap<>());
     systemAdmins.stop();
     return jobModel;
   }

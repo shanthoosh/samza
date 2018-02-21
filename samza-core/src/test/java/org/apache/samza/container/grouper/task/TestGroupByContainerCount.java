@@ -39,7 +39,7 @@ import static org.apache.samza.container.mock.ContainerMocks.getTaskName;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.anyCollection;
+import static org.mockito.Matchers.anyObject;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -228,7 +228,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(5).getTaskName(), "3");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(7).getTaskName(), "3");
 
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
   }
 
   /**
@@ -303,7 +303,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(7).getTaskName(), "1");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(3).getTaskName(), "1");
 
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
   }
 
   /**
@@ -382,7 +382,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(7).getTaskName(), "1");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(3).getTaskName(), "1");
 
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
 
 
     // Second balance
@@ -441,7 +441,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager2).writeTaskContainerMapping(getTaskName(2).getTaskName(), "2");
     verify(taskAssignmentManager2).writeTaskContainerMapping(getTaskName(3).getTaskName(), "2");
 
-    verify(taskAssignmentManager2, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager2, never()).deleteTaskMappings(anyObject());
   }
 
   /**
@@ -498,7 +498,7 @@ public class TestGroupByContainerCount {
     assertTrue(container1.getTasks().containsKey(getTaskName(7)));
 
     verify(taskAssignmentManager, never()).writeTaskContainerMapping(anyString(), anyString());
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
   }
 
   /**
@@ -568,7 +568,7 @@ public class TestGroupByContainerCount {
     assertTrue(container1.getTasks().containsKey(getTaskName(8)));
 
     verify(taskAssignmentManager, never()).writeTaskContainerMapping(anyString(), anyString());
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
   }
 
   /**
@@ -641,7 +641,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(4).getTaskName(), "2");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(5).getTaskName(), "0");
 
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
   }
 
   @Test
@@ -662,7 +662,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(1).getTaskName(), "1");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(2).getTaskName(), "2");
 
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
   }
 
   @Test
@@ -682,7 +682,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(1).getTaskName(), "0");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(2).getTaskName(), "0");
 
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
   }
 
   @Test
@@ -700,7 +700,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(1).getTaskName(), "0");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(2).getTaskName(), "0");
 
-    verify(taskAssignmentManager, never()).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager, never()).deleteTaskMappings(anyObject());
   }
 
   @Test
@@ -721,7 +721,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(1).getTaskName(), "0");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(2).getTaskName(), "0");
 
-    verify(taskAssignmentManager).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager).deleteTaskMappings(anyObject());
   }
 
   @Test
@@ -742,7 +742,7 @@ public class TestGroupByContainerCount {
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(1).getTaskName(), "0");
     verify(taskAssignmentManager).writeTaskContainerMapping(getTaskName(2).getTaskName(), "0");
 
-    verify(taskAssignmentManager).deleteTaskContainerMappings(anyCollection());
+    verify(taskAssignmentManager).deleteTaskMappings(anyObject());
   }
 
   @Test(expected = IllegalArgumentException.class)

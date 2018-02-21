@@ -40,6 +40,10 @@ import org.apache.samza.coordinator.scheduler.LivenessCheckScheduler;
 import org.apache.samza.coordinator.scheduler.RenewLeaseScheduler;
 import org.apache.samza.coordinator.scheduler.SchedulerStateChangeListener;
 import org.apache.samza.job.model.JobModel;
+import org.apache.samza.metrics.MetricsRegistryMap;
+import org.apache.samza.runtime.LocationId;
+import org.apache.samza.runtime.LocationIdProvider;
+import org.apache.samza.runtime.LocationIdProviderFactory;
 import org.apache.samza.runtime.ProcessorIdGenerator;
 import org.apache.samza.system.StreamMetadataCache;
 import org.apache.samza.system.SystemAdmins;
@@ -56,12 +60,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.collection.JavaConverters;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -89,6 +88,7 @@ public class AzureJobCoordinator implements JobCoordinator {
   private final HeartbeatScheduler heartbeat;
   private final JMVersionUpgradeScheduler versionUpgrade;
   private final LeaderLivenessCheckScheduler leaderAlive;
+  private final LocationId locationId;
   private LivenessCheckScheduler liveness;
   private RenewLeaseScheduler renewLease;
   private LeaderBarrierCompleteScheduler leaderBarrierScheduler;
@@ -104,6 +104,9 @@ public class AzureJobCoordinator implements JobCoordinator {
   public AzureJobCoordinator(Config config) {
     //TODO: Cleanup previous values in the table when barrier times out.
     this.config = config;
+    LocationIdProviderFactory locationIdProviderFactory = Util.getObj(new JobConfig(config).getLocationIdProviderFactory());
+    LocationIdProvider locationIdProvider = locationIdProviderFactory.getLocationIdProvider();
+    this.locationId = locationIdProvider.getLocationId(config);
     processorId = createProcessorId(config);
     currentJMVersion = new AtomicReference<>(INITIAL_STATE);
     AzureConfig azureConfig = new AzureConfig(config);
@@ -366,7 +369,7 @@ public class AzureJobCoordinator implements JobCoordinator {
 
     // Generate the new JobModel
     JobModel newJobModel = JobModelManager.readJobModel(this.config, Collections.emptyMap(),
-        null, streamMetadataCache, currentProcessorIds);
+        null, streamMetadataCache, currentProcessorIds, new MetricsRegistryMap(), this.locationId, new HashMap<>(), new HashMap<>());
     LOG.info("pid=" + processorId + "Generated new Job Model. Version = " + nextJMVersion);
 
     // Publish the new job model

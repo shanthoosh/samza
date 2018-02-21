@@ -45,6 +45,7 @@ import org.apache.samza.config.JobConfig
 import org.apache.samza.coordinator.stream.{CoordinatorStreamManager, MockCoordinatorStreamSystemFactory, MockCoordinatorStreamWrappedConsumer}
 import org.apache.samza.job.MockJobFactory
 import org.apache.samza.metrics.MetricsRegistryMap
+import org.apache.samza.runtime.LocationId
 import org.apache.samza.storage.ChangelogStreamManager
 import org.scalatest.{FlatSpec, PrivateMethodTester}
 
@@ -292,9 +293,9 @@ class TestJobCoordinator extends FlatSpec with PrivateMethodTester {
   @Before
   def setUp() {
     // setup the test stream metadata
-    MockSystemFactory.MSG_QUEUES.put(new SystemStreamPartition("test", "stream1", new Partition(0)), new util.ArrayList[IncomingMessageEnvelope]());
-    MockSystemFactory.MSG_QUEUES.put(new SystemStreamPartition("test", "stream1", new Partition(1)), new util.ArrayList[IncomingMessageEnvelope]());
-    MockSystemFactory.MSG_QUEUES.put(new SystemStreamPartition("test", "stream1", new Partition(2)), new util.ArrayList[IncomingMessageEnvelope]());
+    MockSystemFactory.MSG_QUEUES.put(new SystemStreamPartition("test", "stream1", new Partition(0)), new util.ArrayList[IncomingMessageEnvelope]())
+    MockSystemFactory.MSG_QUEUES.put(new SystemStreamPartition("test", "stream1", new Partition(1)), new util.ArrayList[IncomingMessageEnvelope]())
+    MockSystemFactory.MSG_QUEUES.put(new SystemStreamPartition("test", "stream1", new Partition(2)), new util.ArrayList[IncomingMessageEnvelope]())
   }
 
   @After

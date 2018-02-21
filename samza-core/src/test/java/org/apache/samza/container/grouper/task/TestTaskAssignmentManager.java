@@ -20,13 +20,18 @@
 package org.apache.samza.container.grouper.task;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+
 import org.apache.samza.config.Config;
 import org.apache.samza.config.MapConfig;
+import org.apache.samza.container.TaskName;
 import org.apache.samza.coordinator.stream.CoordinatorStreamManager;
 import org.apache.samza.coordinator.stream.MockCoordinatorStreamSystemFactory;
 import org.apache.samza.coordinator.stream.MockCoordinatorStreamSystemFactory.MockCoordinatorStreamSystemConsumer;
 import org.apache.samza.coordinator.stream.MockCoordinatorStreamSystemFactory.MockCoordinatorStreamSystemProducer;
+import org.apache.samza.metrics.MetricsRegistryMap;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -63,7 +68,7 @@ public class TestTaskAssignmentManager {
     consumer.register();
     CoordinatorStreamManager
         coordinatorStreamManager = new CoordinatorStreamManager(producer, consumer);
-    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(coordinatorStreamManager);
+    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(new MapConfig(), new MetricsRegistryMap());
 
     assertTrue(producer.isRegistered());
     assertEquals(producer.getRegisteredSource(), "SamzaTaskAssignmentManager");
@@ -106,7 +111,7 @@ public class TestTaskAssignmentManager {
     consumer.register();
     CoordinatorStreamManager
         coordinatorStreamManager = new CoordinatorStreamManager(producer, consumer);
-    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(coordinatorStreamManager);
+    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(new MapConfig(), new MetricsRegistryMap());
 
     assertTrue(producer.isRegistered());
     assertEquals(producer.getRegisteredSource(), "SamzaTaskAssignmentManager");
@@ -130,7 +135,12 @@ public class TestTaskAssignmentManager {
     Map<String, String> localMap = taskAssignmentManager.readTaskAssignment();
     assertEquals(expectedMap, localMap);
 
-    taskAssignmentManager.deleteTaskContainerMappings(localMap.keySet());
+    Set<TaskName> taskNames = new HashSet<>();
+    for (String taskName : localMap.keySet()) {
+      taskNames.add(new TaskName(taskName));
+    }
+
+    taskAssignmentManager.deleteTaskMappings(taskNames.iterator());
     Map<String, String> deletedMap = taskAssignmentManager.readTaskAssignment();
     assertTrue(deletedMap.isEmpty());
 
@@ -149,7 +159,7 @@ public class TestTaskAssignmentManager {
     consumer.register();
     CoordinatorStreamManager
         coordinatorStreamManager = new CoordinatorStreamManager(producer, consumer);
-    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(coordinatorStreamManager);
+    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(new MapConfig(), new MetricsRegistryMap());
 
     assertTrue(producer.isRegistered());
     assertEquals(producer.getRegisteredSource(), "SamzaTaskAssignmentManager");

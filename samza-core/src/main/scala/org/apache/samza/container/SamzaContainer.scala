@@ -24,7 +24,7 @@ import java.net.{URL, UnknownHostException}
 import java.nio.file.Path
 import java.util
 import java.util.Base64
-import java.util.concurrent.{ScheduledExecutorService, ExecutorService, Executors, TimeUnit}
+import java.util.concurrent.{ExecutorService, Executors, ScheduledExecutorService, TimeUnit}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.samza.checkpoint.{CheckpointListener, CheckpointManagerFactory, OffsetManager, OffsetManagerMetrics}
@@ -39,9 +39,10 @@ import org.apache.samza.config._
 import org.apache.samza.container.disk.DiskSpaceMonitor.Listener
 import org.apache.samza.container.disk.{DiskQuotaPolicyFactory, DiskSpaceMonitor, NoThrottlingDiskQuotaPolicyFactory, PollingScanDiskSpaceMonitor}
 import org.apache.samza.container.host.{StatisticsMonitorImpl, SystemMemoryStatistics, SystemStatisticsMonitor}
-import org.apache.samza.coordinator.stream.{CoordinatorStreamManager, CoordinatorStreamSystemProducer}
 import org.apache.samza.job.model.JobModel
+import org.apache.samza.metadatastore.{MetadataStore, MetadataStoreFactory}
 import org.apache.samza.metrics.{JmxServer, JvmMetrics, MetricsRegistryMap, MetricsReporter}
+import org.apache.samza.runtime.{LocationId, LocationIdProvider, LocationIdProviderFactory}
 import org.apache.samza.serializers._
 import org.apache.samza.serializers.model.SamzaObjectMapper
 import org.apache.samza.storage.{StorageEngineFactory, TaskStorageManager}
@@ -85,16 +86,13 @@ object SamzaContainer extends Logging {
     val containerName = "samza-container-%s" format containerId
     val maxChangeLogStreamPartitions = jobModel.maxChangeLogStreamPartitions
 
-    var coordinatorStreamManager: CoordinatorStreamManager = null
-    var localityManager: LocalityManager = null
-    if (new ClusterManagerConfig(config).getHostAffinityEnabled()) {
-      val registryMap = new MetricsRegistryMap(containerName)
-      val coordinatorStreamSystemProducer = new CoordinatorStreamSystemProducer(config, new SamzaContainerMetrics(containerName, registryMap).registry)
-      coordinatorStreamManager = new CoordinatorStreamManager(coordinatorStreamSystemProducer)
-      localityManager = new LocalityManager(coordinatorStreamManager)
-    }
+    val registryMap = new MetricsRegistryMap(containerName)
+    val localityManager: LocalityManager = new LocalityManager(config, registryMap)
 
     val containerPID = Util.getContainerPID
+    val locationIdProviderFactory: LocationIdProviderFactory = Util.getObj(config.getLocationIdProviderFactory)
+    val locationIdProvider: LocationIdProvider = locationIdProviderFactory.getLocationIdProvider
+    val locationId: LocationId = locationIdProvider.getLocationId(config)
 
     info("Setting up Samza container: %s" format containerName)
 
@@ -630,8 +628,8 @@ object SamzaContainer extends Logging {
       consumerMultiplexer = consumerMultiplexer,
       producerMultiplexer = producerMultiplexer,
       offsetManager = offsetManager,
-      coordinatorStreamManager = coordinatorStreamManager,
       localityManager = localityManager,
+      locationId = locationId,
       securityManager = securityManager,
       metrics = samzaContainerMetrics,
       reporters = reporters,
@@ -644,23 +642,23 @@ object SamzaContainer extends Logging {
 }
 
 class SamzaContainer(
-  containerContext: SamzaContainerContext,
-  taskInstances: Map[TaskName, TaskInstance],
-  runLoop: Runnable,
-  systemAdmins: SystemAdmins,
-  consumerMultiplexer: SystemConsumers,
-  producerMultiplexer: SystemProducers,
-  metrics: SamzaContainerMetrics,
-  diskSpaceMonitor: DiskSpaceMonitor = null,
-  hostStatisticsMonitor: SystemStatisticsMonitor = null,
-  offsetManager: OffsetManager = new OffsetManager,
-  coordinatorStreamManager: CoordinatorStreamManager = null,
-  localityManager: LocalityManager = null,
-  securityManager: SecurityManager = null,
-  reporters: Map[String, MetricsReporter] = Map(),
-  jvm: JvmMetrics = null,
-  taskThreadPool: ExecutorService = null,
-  timerExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor) extends Runnable with Logging {
+                      containerContext: SamzaContainerContext,
+                      taskInstances: Map[TaskName, TaskInstance],
+                      runLoop: Runnable,
+                      systemAdmins: SystemAdmins,
+                      consumerMultiplexer: SystemConsumers,
+                      producerMultiplexer: SystemProducers,
+                      metrics: SamzaContainerMetrics,
+                      locationId: LocationId = new LocationId(Util.getLocalHost.getHostName),
+                      diskSpaceMonitor: DiskSpaceMonitor = null,
+                      hostStatisticsMonitor: SystemStatisticsMonitor = null,
+                      offsetManager: OffsetManager = new OffsetManager,
+                      localityManager: LocalityManager = null,
+                      securityManager: SecurityManager = null,
+                      reporters: Map[String, MetricsReporter] = Map(),
+                      jvm: JvmMetrics = null,
+                      taskThreadPool: ExecutorService = null,
+                      timerExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor) extends Runnable with Logging {
 
   val shutdownMs = containerContext.config.getShutdownMs.getOrElse(TaskConfigJava.DEFAULT_TASK_SHUTDOWN_MS)
   var shutdownHookThread: Thread = null
@@ -849,29 +847,12 @@ class SamzaContainer(
 
   def startLocalityManager {
     if(localityManager != null) {
-      if(coordinatorStreamManager == null) {
-        // This should never happen.
-        throw new IllegalStateException("Cannot start LocalityManager without a CoordinatorStreamManager")
-      }
-
-      val containerName = "SamzaContainer-" + String.valueOf(containerContext.id)
-      info("Registering %s with the coordinator stream manager." format containerName)
-      coordinatorStreamManager.start
-      coordinatorStreamManager.register(containerName)
-
-      info("Writing container locality and JMX address to Coordinator Stream")
       try {
-        val hostInet = Util.getLocalHost
-        val jmxUrl = if (jmxServer != null) jmxServer.getJmxUrl else ""
-        val jmxTunnelingUrl = if (jmxServer != null) jmxServer.getTunnelingJmxUrl else ""
-        localityManager.writeContainerToHostMapping(containerContext.id, hostInet.getHostName, jmxUrl, jmxTunnelingUrl)
+        localityManager.init(containerContext)
+        localityManager.writeContainerToHostMapping(containerContext.id, Util.getLocalHost.getHostName, jmxServer.getJmxUrl, jmxServer.getTunnelingJmxUrl)
       } catch {
-        case uhe: UnknownHostException =>
-          warn("Received UnknownHostException when persisting locality info for container %s: " +
-            "%s" format (containerContext.id, uhe.getMessage))  //No-op
-        case unknownException: Throwable =>
-          warn("Received an exception when persisting locality info for container %s: " +
-            "%s" format (containerContext.id, unknownException.getMessage))
+        case throwable: Throwable =>
+          error("Exception occurred when persisting task locality of container %s: %s" format (containerContext.id, throwable.getMessage))
       }
     }
   }
@@ -1039,11 +1020,9 @@ class SamzaContainer(
     taskInstances.values.foreach(_.shutdownTableManager)
   }
 
-  def shutdownLocalityManager {
-    if(coordinatorStreamManager != null) {
-      info("Shutting down coordinator stream manager used by locality manager.")
-      coordinatorStreamManager.stop
-    }
+  def shutdownLocalityManager: Unit = {
+    info("Stopping locality manager.")
+    localityManager.close()
   }
 
   def shutdownOffsetManager {

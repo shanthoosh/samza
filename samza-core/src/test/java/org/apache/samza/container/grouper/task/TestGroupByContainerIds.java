@@ -114,7 +114,8 @@ public class TestGroupByContainerIds {
   public void testGroupWithNullContainerIds() {
     Set<TaskModel> taskModels = generateTaskModels(5);
 
-    Set<ContainerModel> containers = buildSimpleGrouper(2).group(taskModels, null);
+    List<String> containerIds = null;
+    Set<ContainerModel> containers = buildSimpleGrouper(2).group(taskModels, containerIds);
 
     Map<String, ContainerModel> containersMap = new HashMap<>();
     for (ContainerModel container : containers) {
