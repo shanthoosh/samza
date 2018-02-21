@@ -78,8 +78,8 @@ Then run the python script to start the test:
     --node-list=/tmp/nodes.txt \
     --kill-time=60 \
     --kafka-dir=$DEPLOY_DIR/kafka \
-    --kafka-host=localhost \
+    --kafka-locationId=localhost \
     --yarn-dir=$DEPLOY_DIR/yarn \
-    --yarn-host=localhost \
+    --yarn-locationId=localhost \
     --kill-kafka \
     --kill-container

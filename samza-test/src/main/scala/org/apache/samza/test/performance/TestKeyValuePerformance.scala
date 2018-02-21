@@ -29,6 +29,7 @@ import org.apache.samza.config.Config
 import org.apache.samza.config.StorageConfig._
 import org.apache.samza.container.{SamzaContainerContext, TaskName}
 import org.apache.samza.metrics.MetricsRegistryMap
+import org.apache.samza.runtime.LocationId
 import org.apache.samza.serializers.{ByteSerde, SerdeManager, UUIDSerde}
 import org.apache.samza.storage.StorageEngineFactory
 import org.apache.samza.storage.kv.{KeyValueStorageEngine, KeyValueStore}
@@ -116,7 +117,7 @@ object TestKeyValuePerformance extends Logging {
           new TaskInstanceCollector(producerMultiplexer),
           new MetricsRegistryMap,
           null,
-          new SamzaContainerContext("0", config, taskNames, new MetricsRegistryMap)
+          new SamzaContainerContext("0", new LocationId("0"), config, taskNames, new MetricsRegistryMap)
         )
 
         val db = if(!engine.isInstanceOf[KeyValueStorageEngine[_,_]]) {

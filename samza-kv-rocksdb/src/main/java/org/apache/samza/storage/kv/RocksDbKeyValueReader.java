@@ -28,6 +28,7 @@ import org.apache.samza.config.JavaStorageConfig;
 import org.apache.samza.container.SamzaContainerContext;
 import org.apache.samza.container.TaskName;
 import org.apache.samza.metrics.MetricsRegistryMap;
+import org.apache.samza.runtime.LocationId;
 import org.apache.samza.serializers.Serde;
 import org.apache.samza.serializers.SerdeFactory;
 import org.apache.samza.util.Util;
@@ -67,7 +68,7 @@ public class RocksDbKeyValueReader {
     ArrayList<TaskName> taskNameList = new ArrayList<TaskName>();
     taskNameList.add(new TaskName("read-rocks-db"));
     SamzaContainerContext samzaContainerContext =
-        new SamzaContainerContext("0",  config, taskNameList, new MetricsRegistryMap());
+        new SamzaContainerContext("0", new LocationId("0"), config, taskNameList, new MetricsRegistryMap());
     Options options = RocksDbOptionsHelper.options(config, samzaContainerContext);
 
     // open the db

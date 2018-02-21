@@ -47,6 +47,7 @@ import org.apache.samza.operators.functions.MapFunction;
 import org.apache.samza.operators.impl.store.TimestampedValue;
 import org.apache.samza.operators.spec.OperatorSpec.OpCode;
 import org.apache.samza.runtime.ApplicationRunner;
+import org.apache.samza.runtime.LocationId;
 import org.apache.samza.serializers.IntegerSerde;
 import org.apache.samza.serializers.KVSerde;
 import org.apache.samza.serializers.NoOpSerde;
@@ -157,7 +158,7 @@ public class TestOperatorImplGraph {
     when(taskModel.getSystemStreamPartitions()).thenReturn(Collections.emptySet());
     when(mockTaskContext.getJobModel()).thenReturn(jobModel);
     SamzaContainerContext containerContext =
-        new SamzaContainerContext("0", mockConfig, Collections.singleton(new TaskName("task 0")), new MetricsRegistryMap());
+        new SamzaContainerContext("0", new LocationId("0"), mockConfig, Collections.singleton(new TaskName("task 0")), new MetricsRegistryMap());
     when(mockTaskContext.getSamzaContainerContext()).thenReturn(containerContext);
     OperatorImplGraph opImplGraph =
         new OperatorImplGraph(streamGraph, mockConfig, mockTaskContext, mock(Clock.class));

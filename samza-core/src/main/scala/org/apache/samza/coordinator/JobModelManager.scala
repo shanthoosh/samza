@@ -29,19 +29,19 @@ import org.apache.samza.config.SystemConfig.Config2System
 import org.apache.samza.config.TaskConfig.Config2Task
 import org.apache.samza.config.Config
 import org.apache.samza.container.grouper.stream.SystemStreamPartitionGrouperFactory
-import org.apache.samza.container.grouper.task.BalancingTaskNameGrouper
-import org.apache.samza.container.grouper.task.TaskNameGrouperFactory
+import org.apache.samza.container.grouper.task.{BalancingTaskNameGrouper, TaskAssignmentManager, TaskNameGrouperContext, TaskNameGrouperFactory}
 import org.apache.samza.container.LocalityManager
 import org.apache.samza.container.TaskName
 import org.apache.samza.coordinator.server.HttpServer
 import org.apache.samza.coordinator.server.JobServlet
 import org.apache.samza.coordinator.stream.CoordinatorStreamManager
-import org.apache.samza.job.model.JobModel
-import org.apache.samza.job.model.TaskModel
+import org.apache.samza.job.model.{ContainerModel, JobModel, TaskModel}
+import org.apache.samza.metrics.{MetricsRegistry, MetricsRegistryMap}
 import org.apache.samza.system._
 import org.apache.samza.util.Logging
 import org.apache.samza.util.Util
 import org.apache.samza.Partition
+import org.apache.samza.metadatastore.{MetadataStore, MetadataStoreFactory}
 
 import scala.collection.JavaConverters._
 
@@ -94,7 +94,7 @@ object JobModelManager extends Logging {
                                 localityManager: LocalityManager,
                                 streamMetadataCache: StreamMetadataCache,
                                 containerIds: java.util.List[String]) = {
-    val jobModel: JobModel = readJobModel(config, changeLogMapping, localityManager, streamMetadataCache, containerIds)
+    val jobModel: JobModel = readJobModel(config, changeLogMapping, localityManager, streamMetadataCache, containerIds, new MetricsRegistryMap())
     jobModelRef.set(jobModel)
 
     val server = new HttpServer
@@ -153,6 +153,21 @@ object JobModelManager extends Logging {
     factory.getSystemStreamPartitionGrouper(config)
   }
 
+  def deleteTaskAssignments(localityManager: LocalityManager, taskCount: Int) = {
+    if (localityManager != null) {
+      val taskAssignmentManager: TaskAssignmentManager = localityManager.getTaskAssignmentManager
+      val taskToContainerId = taskAssignmentManager.readTaskAssignment
+
+      warn("Current task count {} does not match saved task count {}. Stateful jobs may observe misalignment of keys!", taskCount, taskToContainerId.size)
+      // If the tasks changed, then the partition-task grouping is also likely changed and we can't handle that
+      // without a much more complicated mapping. Further, the partition count may have changed, which means
+      // input message keys are likely reshuffled w.r.t. partitions, so the local state may not contain necessary
+      // data associated with the incoming keys. Warn the user and default to grouper
+      // In this scenario the tasks may have been reduced, so we need to delete all the existing messages
+      taskAssignmentManager.deleteTaskContainerMappings(taskToContainerId.keySet)
+    }
+  }
+
   /**
    * The function reads the latest checkpoint from the underlying coordinator stream and
    * builds a new JobModel.
@@ -161,7 +176,8 @@ object JobModelManager extends Logging {
                    changeLogPartitionMapping: util.Map[TaskName, Integer],
                    localityManager: LocalityManager,
                    streamMetadataCache: StreamMetadataCache,
-                   containerIds: java.util.List[String]): JobModel = {
+                   containerIds: java.util.List[String],
+                   metricsRegistry: MetricsRegistry): JobModel = {
     // Do grouping to fetch TaskName to SSP mapping
     val allSystemStreamPartitions = getMatchedInputStreamPartitions(config, streamMetadataCache)
 
@@ -205,15 +221,43 @@ object JobModelManager extends Logging {
     val containerModels = {
       containerGrouper match {
         case grouper: BalancingTaskNameGrouper if isHostAffinityEnabled => grouper.balance(taskModels.asJava, localityManager)
-        case _ => containerGrouper.group(taskModels.asJava, containerIds)
+        case _ =>
+          val metadataStoreFactory: MetadataStoreFactory = Util.getObj[MetadataStoreFactory](config.getMetadataStoreFactory)
+          val metadataStore: MetadataStore = metadataStoreFactory.getMetadataStore(config, metricsRegistry)
+          val processorLocality = metadataStore.readProcessorLocality()
+          val taskLocality = metadataStore.readTaskLocality()
+
+          if (taskLocality.size != taskModels.size) {
+            // If the tasks changed, then the partition-task grouping is also likely changed and we can't handle that
+            // without a much more complicated mapping. Further, the partition count may have changed, which means
+            // input message keys are likely reshuffled w.r.t. partitions, so the local state may not contain necessary
+            // data associated with the incoming keys. Warn the user and default to grouper
+            // In this scenario the tasks may have been reduced, so we need to delete all the existing messages
+            metadataStore.deleteTaskLocality(taskLocality.keySet())
+          }
+          info("Generating containerModels with taskLocality: {}, processorLocality: {} and taskModels: {}.", taskLocality, processorLocality, taskModels)
+          containerGrouper.group(new TaskNameGrouperContext(taskModels.asJava, taskLocality, processorLocality))
       }
     }
+    saveContainerModels(localityManager, containerModels)
+
     val containerMap = containerModels.asScala.map { case (containerModel) => containerModel.getProcessorId -> containerModel }.toMap
 
     if (isHostAffinityEnabled) {
       new JobModel(config, containerMap.asJava, localityManager)
     } else {
       new JobModel(config, containerMap.asJava)
+    }
+  }
+
+  private def saveContainerModels(localityManager: LocalityManager, containerModels: util.Set[ContainerModel]) = {
+    if (localityManager != null) {
+      val taskAssignmentManager: TaskAssignmentManager = localityManager.getTaskAssignmentManager
+      for (container <- containerModels.asScala) {
+        for (taskName <- container.getTasks.keySet.asScala) {
+          taskAssignmentManager.writeTaskContainerMapping(taskName.getTaskName, container.getProcessorId)
+        }
+      }
     }
   }
 

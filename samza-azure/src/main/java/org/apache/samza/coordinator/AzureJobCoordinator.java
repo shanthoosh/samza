@@ -40,6 +40,7 @@ import org.apache.samza.coordinator.scheduler.LivenessCheckScheduler;
 import org.apache.samza.coordinator.scheduler.RenewLeaseScheduler;
 import org.apache.samza.coordinator.scheduler.SchedulerStateChangeListener;
 import org.apache.samza.job.model.JobModel;
+import org.apache.samza.metrics.MetricsRegistryMap;
 import org.apache.samza.runtime.ProcessorIdGenerator;
 import org.apache.samza.system.StreamMetadataCache;
 import org.apache.samza.system.SystemAdmins;
@@ -366,7 +367,7 @@ public class AzureJobCoordinator implements JobCoordinator {
 
     // Generate the new JobModel
     JobModel newJobModel = JobModelManager.readJobModel(this.config, Collections.emptyMap(),
-        null, streamMetadataCache, currentProcessorIds);
+        null, streamMetadataCache, currentProcessorIds, new MetricsRegistryMap());
     LOG.info("pid=" + processorId + "Generated new Job Model. Version = " + nextJMVersion);
 
     // Publish the new job model

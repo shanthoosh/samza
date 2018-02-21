@@ -23,6 +23,7 @@ import java.util.Collections
 import org.apache.samza.config.MapConfig
 import org.apache.samza.container._
 import org.apache.samza.metrics.MetricsRegistryMap
+import org.apache.samza.runtime.LocationId
 import org.apache.samza.serializers.SerdeManager
 import org.apache.samza.system.chooser.RoundRobinChooser
 import org.apache.samza.system._
@@ -41,7 +42,7 @@ object StreamProcessorTestUtils {
       Map[String, SystemProducer](),
       new SerdeManager)
     val collector = new TaskInstanceCollector(producerMultiplexer)
-    val containerContext = new SamzaContainerContext("0", config, Collections.singleton[TaskName](taskName), new MetricsRegistryMap)
+    val containerContext = new SamzaContainerContext("0", new LocationId("0"), config, Collections.singleton[TaskName](taskName), new MetricsRegistryMap)
     val taskInstance: TaskInstance = new TaskInstance(
       streamTask,
       taskName,

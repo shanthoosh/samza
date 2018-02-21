@@ -54,5 +54,6 @@ public interface BalancingTaskNameGrouper extends TaskNameGrouper {
    * @param localityManager provides a persisted task to container map to use as a baseline
    * @return                the grouped tasks in the form of ContainerModels
    */
+  @Deprecated
   Set<ContainerModel> balance(Set<TaskModel> tasks, LocalityManager localityManager);
 }

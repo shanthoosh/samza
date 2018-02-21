@@ -89,6 +89,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   private final ZkBarrierForVersionUpgrade barrier;
   private final ZkJobCoordinatorMetrics metrics;
   private final Map<String, MetricsReporter> reporters;
+  private final MetricsRegistry metricsRegistry;
 
   private StreamMetadataCache streamMetadataCache = null;
   private SystemAdmins systemAdmins = null;
@@ -104,6 +105,8 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     this.config = config;
 
     this.metrics = new ZkJobCoordinatorMetrics(metricsRegistry);
+
+    this.metricsRegistry = metricsRegistry;
 
     this.processorId = createProcessorId(config);
     this.zkUtils = zkUtils;
@@ -310,11 +313,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       }
       cachedJobModelVersion = zkJobModelVersion;
     }
-    /**
-     * Host affinity is not supported in standalone. Hence, LocalityManager(which is responsible for container
-     * to host mapping) is passed in as null when building the jobModel.
-     */
-    return JobModelManager.readJobModel(this.config, changeLogPartitionMap, null, streamMetadataCache, processors);
+    return JobModelManager.readJobModel(this.config, changeLogPartitionMap, null, streamMetadataCache, processors, metricsRegistry);
   }
 
   class LeaderElectorListenerImpl implements LeaderElectorListener {

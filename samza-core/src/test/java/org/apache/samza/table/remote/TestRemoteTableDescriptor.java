@@ -29,6 +29,7 @@ import org.apache.samza.metrics.Counter;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.metrics.Timer;
 import org.apache.samza.operators.KV;
+import org.apache.samza.runtime.LocationId;
 import org.apache.samza.table.Table;
 import org.apache.samza.table.TableSpec;
 import org.apache.samza.task.TaskContext;
@@ -124,7 +125,7 @@ public class TestRemoteTableDescriptor {
     TaskContext taskContext = mock(TaskContext.class);
     doReturn(metricsRegistry).when(taskContext).getMetricsRegistry();
     SamzaContainerContext containerCtx = new SamzaContainerContext(
-        "1", null, Collections.singleton(new TaskName("MyTask")), null);
+        "1", new LocationId("1"), null, Collections.singleton(new TaskName("MyTask")), null);
     doReturn(containerCtx).when(taskContext).getSamzaContainerContext();
     return taskContext;
   }

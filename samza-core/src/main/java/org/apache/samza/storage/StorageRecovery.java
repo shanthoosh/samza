@@ -38,6 +38,7 @@ import org.apache.samza.job.model.ContainerModel;
 import org.apache.samza.job.model.JobModel;
 import org.apache.samza.job.model.TaskModel;
 import org.apache.samza.metrics.MetricsRegistryMap;
+import org.apache.samza.runtime.LocationId;
 import org.apache.samza.serializers.ByteSerde;
 import org.apache.samza.serializers.Serde;
 import org.apache.samza.system.StreamMetadataCache;
@@ -199,8 +200,7 @@ public class StorageRecovery extends CommandLine {
 
     for (ContainerModel containerModel : containers.values()) {
       HashMap<String, StorageEngine> taskStores = new HashMap<String, StorageEngine>();
-      SamzaContainerContext containerContext = new SamzaContainerContext(containerModel.getProcessorId(), jobConfig, containerModel.getTasks()
-          .keySet(), new MetricsRegistryMap());
+      SamzaContainerContext containerContext = new SamzaContainerContext(containerModel.getProcessorId(), new LocationId(containerModel.getProcessorId()), jobConfig, containerModel.getTasks().keySet(), new MetricsRegistryMap());
 
       for (TaskModel taskModel : containerModel.getTasks().values()) {
         HashMap<String, SystemConsumer> storeConsumers = getStoreConsumers();

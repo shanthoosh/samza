@@ -41,24 +41,16 @@ import java.util.Map;
  * </p>
  */
 public class ContainerModel {
-  @Deprecated
-  private final int containerId;
   private final String processorId;
   private final Map<TaskName, TaskModel> tasks;
 
   public ContainerModel(String processorId, int containerId, Map<TaskName, TaskModel> tasks) {
-    this.containerId = containerId;
     if (processorId == null) {
       this.processorId = String.valueOf(containerId);
     } else {
       this.processorId = processorId;
     }
     this.tasks = Collections.unmodifiableMap(tasks);
-  }
-
-  @Deprecated
-  public int getContainerId() {
-    return containerId;
   }
 
   public String getProcessorId() {

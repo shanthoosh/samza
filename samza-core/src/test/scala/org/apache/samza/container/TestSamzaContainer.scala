@@ -30,6 +30,7 @@ import org.apache.samza.config.{Config, MapConfig}
 import org.apache.samza.coordinator.JobModelManager
 import org.apache.samza.coordinator.server.{HttpServer, JobServlet}
 import org.apache.samza.job.model.{ContainerModel, JobModel, TaskModel}
+import org.apache.samza.runtime.LocationId
 import org.apache.samza.serializers.SerdeManager
 import org.apache.samza.storage.TaskStorageManager
 import org.apache.samza.system.chooser.RoundRobinChooser
@@ -167,7 +168,7 @@ class TestSamzaContainer extends AssertionsForJUnit with MockitoSugar {
       Map[String, SystemProducer](),
       new SerdeManager)
     val collector = new TaskInstanceCollector(producerMultiplexer)
-    val containerContext = new SamzaContainerContext("0", config, Set[TaskName](taskName), new MetricsRegistryMap)
+    val containerContext = new SamzaContainerContext("0", new LocationId("0"), config, Set[TaskName](taskName), new MetricsRegistryMap)
     val taskInstance: TaskInstance = new TaskInstance(
       task,
       taskName,
@@ -250,7 +251,7 @@ class TestSamzaContainer extends AssertionsForJUnit with MockitoSugar {
       Map[String, SystemProducer](),
       new SerdeManager)
     val collector = new TaskInstanceCollector(producerMultiplexer)
-    val containerContext = new SamzaContainerContext("0", config, Set[TaskName](taskName), new MetricsRegistryMap)
+    val containerContext = new SamzaContainerContext("0", new LocationId("0"), config, Set[TaskName](taskName), new MetricsRegistryMap)
     val taskInstance: TaskInstance = new TaskInstance(
       task,
       taskName,
@@ -332,7 +333,7 @@ class TestSamzaContainer extends AssertionsForJUnit with MockitoSugar {
       Map[String, SystemProducer](),
       new SerdeManager)
     val collector = new TaskInstanceCollector(producerMultiplexer)
-    val containerContext = new SamzaContainerContext("0", config, Set[TaskName](taskName), new MetricsRegistryMap)
+    val containerContext = new SamzaContainerContext("0", new LocationId("0"), config, Set[TaskName](taskName), new MetricsRegistryMap)
     val taskInstance: TaskInstance = new TaskInstance(
       task,
       taskName,
@@ -413,7 +414,7 @@ class TestSamzaContainer extends AssertionsForJUnit with MockitoSugar {
       Map[String, SystemProducer](),
       new SerdeManager)
     val collector = new TaskInstanceCollector(producerMultiplexer)
-    val containerContext = new SamzaContainerContext("0", config, Set[TaskName](taskName), new MetricsRegistryMap)
+    val containerContext = new SamzaContainerContext("0", new LocationId("0"), config, Set[TaskName](taskName), new MetricsRegistryMap)
     val taskInstance: TaskInstance = new TaskInstance(
       task,
       taskName,
@@ -491,7 +492,7 @@ class TestSamzaContainer extends AssertionsForJUnit with MockitoSugar {
       Map[String, SystemProducer](),
       new SerdeManager)
     val collector = new TaskInstanceCollector(producerMultiplexer)
-    val containerContext = new SamzaContainerContext("0", config, Set[TaskName](taskName), new MetricsRegistryMap)
+    val containerContext = new SamzaContainerContext("0", new LocationId("0"), config, Set[TaskName](taskName), new MetricsRegistryMap)
     val taskInstance: TaskInstance = new TaskInstance(
       task,
       taskName,
@@ -561,7 +562,7 @@ class TestSamzaContainer extends AssertionsForJUnit with MockitoSugar {
       Map[String, SystemProducer](),
       new SerdeManager)
     val collector = new TaskInstanceCollector(producerMultiplexer)
-    val containerContext = new SamzaContainerContext("0", config, Set[TaskName](taskName), new MetricsRegistryMap)
+    val containerContext = new SamzaContainerContext("0", new LocationId("0"), config, Set[TaskName](taskName), new MetricsRegistryMap)
     val mockTaskStorageManager = mock[TaskStorageManager]
 
     when(mockTaskStorageManager.init).thenAnswer(new Answer[String] {

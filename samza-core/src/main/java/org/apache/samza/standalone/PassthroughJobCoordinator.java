@@ -28,6 +28,7 @@ import org.apache.samza.coordinator.JobCoordinator;
 import org.apache.samza.coordinator.JobModelManager;
 import org.apache.samza.job.model.JobModel;
 import org.apache.samza.coordinator.JobCoordinatorListener;
+import org.apache.samza.metrics.MetricsRegistryMap;
 import org.apache.samza.runtime.ProcessorIdGenerator;
 import org.apache.samza.system.StreamMetadataCache;
 import org.apache.samza.system.SystemAdmins;
@@ -124,7 +125,7 @@ public class PassthroughJobCoordinator implements JobCoordinator {
      (job.coordinator.task.grouper, instead of task.systemstreampartition.grouper)
      */
     JobModel jobModel = JobModelManager.readJobModel(this.config, Collections.emptyMap(), null, streamMetadataCache,
-        Collections.singletonList(containerId));
+        Collections.singletonList(containerId), new MetricsRegistryMap());
     systemAdmins.stop();
     return jobModel;
   }
