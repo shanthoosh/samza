@@ -19,15 +19,21 @@
 package org.apache.samza.processor;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.apache.samza.SamzaContainerStatus;
+import org.apache.samza.SamzaException;
 import org.apache.samza.annotation.InterfaceStability;
 import org.apache.samza.config.Config;
+import org.apache.samza.config.JavaSystemConfig;
 import org.apache.samza.config.JobCoordinatorConfig;
 import org.apache.samza.config.TaskConfigJava;
 import org.apache.samza.container.IllegalContainerStateException;
@@ -195,6 +201,19 @@ public class StreamProcessor {
   }
 
   SamzaContainer createSamzaContainer(String processorId, JobModel jobModel) {
+    JavaSystemConfig jobModelConfig = new JavaSystemConfig(jobModel.getConfig());
+    JavaSystemConfig processorConfig = new JavaSystemConfig(config);
+    Set<String> jobModelSystemNames = new HashSet<>(jobModelConfig.getSystemNames());
+    Set<String> processorSystemNames = new HashSet<>(processorConfig.getSystemNames());
+    Sets.SetView<String> difference = Sets.difference(jobModelSystemNames, processorSystemNames);
+    if (!difference.isEmpty()) {
+      LOGGER.info("Shutting down the processor. Systems: {} defined in the jobModel is undefined in the processor configuration.", difference);
+      stop();
+      if (processorListener != null) {
+        processorListener.onFailure(new SamzaException(String.format("Shutting down the processor. Systems: %s defined in the jobModel is undefined in the processor configuration.", difference)));
+      }
+    }
+
     return SamzaContainer.apply(
         processorId,
         jobModel,
