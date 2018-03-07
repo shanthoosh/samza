@@ -24,11 +24,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import kafka.admin.AdminUtils;
-import kafka.server.KafkaServer;
 import kafka.utils.TestUtils;
 import org.I0Itec.zkclient.ZkClient;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.samza.SamzaException;
 import org.apache.samza.application.StreamApplication;
@@ -56,12 +54,11 @@ import org.apache.samza.util.NoOpMetricsRegistry;
 import org.apache.samza.zk.ZkJobCoordinatorFactory;
 import org.apache.samza.zk.ZkKeyBuilder;
 import org.apache.samza.zk.ZkUtils;
-import org.junit.Rule;
+import org.junit.*;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.collection.JavaConverters;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -87,14 +84,14 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
   private static final Logger LOGGER = LoggerFactory.getLogger(TestZkLocalApplicationRunner.class);
 
   private static final int NUM_KAFKA_EVENTS = 300;
-  private static final int ZK_CONNECTION_TIMEOUT_MS = 100;
+  private static final int ZK_CONNECTION_TIMEOUT_MS = 5000;
   private static final String TEST_SYSTEM = "TestSystemName";
   private static final String TEST_SSP_GROUPER_FACTORY = "org.apache.samza.container.grouper.stream.GroupByPartitionFactory";
   private static final String TEST_TASK_GROUPER_FACTORY = "org.apache.samza.container.grouper.task.GroupByContainerIdsFactory";
   private static final String TEST_JOB_COORDINATOR_FACTORY = "org.apache.samza.zk.ZkJobCoordinatorFactory";
   private static final String TEST_SYSTEM_FACTORY = "org.apache.samza.system.kafka.KafkaSystemFactory";
-  private static final String TASK_SHUTDOWN_MS = "3000";
-  private static final String JOB_DEBOUNCE_TIME_MS = "1000";
+  private static final String TASK_SHUTDOWN_MS = "20000";
+  private static final String JOB_DEBOUNCE_TIME_MS = "30000";
   private static final String[] PROCESSOR_IDS = new String[] {"0000000000", "0000000001", "0000000002"};
 
   private String inputKafkaTopic;
@@ -117,9 +114,8 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
   @Rule
   public final ExpectedException expectedException = ExpectedException.none();
 
-  //  @Override
-  public void setUp() {
-    super.setUp();
+  @Before
+  public void setUpTestBed() {
     String uniqueTestId = UUID.randomUUID().toString();
     testStreamAppName = String.format("test-app-name-%s", uniqueTestId);
     testStreamAppId = String.format("test-app-id-%s", uniqueTestId);
@@ -157,9 +153,10 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
       LOGGER.info("Creating kafka topic: {}.", kafkaTopic);
       TestUtils.createTopic(zkUtils(), kafkaTopic, 1, 1, servers(), new Properties());
     }
+    super.setUp();
   }
 
-  //  @Override
+  @After
   public void tearDown() {
     if (zookeeper().zookeeper().isRunning()) {
       for (String kafkaTopic : ImmutableList.of(inputKafkaTopic, outputKafkaTopic)) {
@@ -222,7 +219,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
    *           B) Second stream application(streamApp2) should not join the group and process any message.
    */
 
-  //@Test
+  @Test
   public void shouldStopNewProcessorsJoiningGroupWhenNumContainersIsGreaterThanNumTasks() throws InterruptedException {
     // Set up kafka topics.
     publishKafkaEvents(inputSinglePartitionKafkaTopic, NUM_KAFKA_EVENTS * 2, PROCESSOR_IDS[0]);
@@ -299,7 +296,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
    *           B) Second stream application(streamApp2) should join the group and process all the messages.
    */
 
-  //@Test
+  @Test
   public void shouldUpdateJobModelWhenNewProcessorJoiningGroupUsingAllSspToSingleTaskGrouperFactory() throws InterruptedException {
     // Set up kafka topics.
     publishKafkaEvents(inputKafkaTopic, NUM_KAFKA_EVENTS * 2, PROCESSOR_IDS[0]);
@@ -378,7 +375,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     processedMessagesLatch.await();
   }
 
-  //@Test
+  @Test
   public void shouldReElectLeaderWhenLeaderDies() throws InterruptedException {
     // Set up kafka topics.
     publishKafkaEvents(inputKafkaTopic, 2 * NUM_KAFKA_EVENTS, PROCESSOR_IDS[0]);
@@ -432,7 +429,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     assertEquals(2, jobModel.getContainers().size());
   }
 
-  //@Test
+  @Test
   public void shouldFailWhenNewProcessorJoinsWithSameIdAsExistingProcessor() throws InterruptedException {
     // Set up kafka topics.
     publishKafkaEvents(inputKafkaTopic, NUM_KAFKA_EVENTS, PROCESSOR_IDS[0]);
@@ -464,7 +461,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     applicationRunner3.run(streamApp3);
   }
 
-  //@Test
+  @Test
   public void testRollingUpgradeOfStreamApplicationsShouldGenerateSameJobModel() throws Exception {
     // Set up kafka topics.
     publishKafkaEvents(inputKafkaTopic, NUM_KAFKA_EVENTS, PROCESSOR_IDS[0]);
@@ -534,44 +531,6 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     assertTrue(lastProcessedMessageId <= nextSeenMessageId);
     assertEquals(Integer.parseInt(jobModelVersion) + 1, Integer.parseInt(newJobModelVersion));
     assertEquals(jobModel.getContainers(), newJobModel.getContainers());
-  }
-
-  //@Test
-  public void shouldKillStreamAppWhenZooKeeperDiesBeforeLeaderReElection() throws InterruptedException {
-    // Set up kafka topics.
-    publishKafkaEvents(inputKafkaTopic, NUM_KAFKA_EVENTS, PROCESSOR_IDS[0]);
-
-    MapConfig kafkaProducerConfig = new MapConfig(ImmutableMap.of(String.format("systems.%s.producer.%s", TEST_SYSTEM, ProducerConfig.MAX_BLOCK_MS_CONFIG), "1000"));
-    MapConfig applicationRunnerConfig1 = new MapConfig(ImmutableList.of(applicationConfig1, kafkaProducerConfig));
-    MapConfig applicationRunnerConfig2 = new MapConfig(ImmutableList.of(applicationConfig2, kafkaProducerConfig));
-    LocalApplicationRunner applicationRunner1 = new LocalApplicationRunner(applicationRunnerConfig1);
-    LocalApplicationRunner applicationRunner2 = new LocalApplicationRunner(applicationRunnerConfig2);
-
-    CountDownLatch processedMessagesLatch1 = new CountDownLatch(1);
-    CountDownLatch processedMessagesLatch2 = new CountDownLatch(1);
-
-    // Create StreamApplications.
-    StreamApplication streamApp1 = new TestStreamApplication(inputKafkaTopic, outputKafkaTopic, processedMessagesLatch1, null, null);
-    StreamApplication streamApp2 = new TestStreamApplication(inputKafkaTopic, outputKafkaTopic, processedMessagesLatch2, null, null);
-
-    // Run stream applications.
-    applicationRunner1.run(streamApp1);
-    applicationRunner2.run(streamApp2);
-
-    processedMessagesLatch1.await();
-    processedMessagesLatch2.await();
-
-    // Non daemon thread in brokers reconnect repeatedly to zookeeper on failures. Manually shutting them down.
-    List<KafkaServer> kafkaServers = JavaConverters.bufferAsJavaListConverter(this.servers()).asJava();
-    kafkaServers.forEach(KafkaServer::shutdown);
-
-    zookeeper().shutdown();
-
-    applicationRunner1.waitForFinish();
-    applicationRunner2.waitForFinish();
-
-    assertEquals(ApplicationStatus.UnsuccessfulFinish, applicationRunner1.status(streamApp1));
-    assertEquals(ApplicationStatus.UnsuccessfulFinish, applicationRunner2.status(streamApp2));
   }
 
   public interface StreamApplicationCallback {

@@ -93,7 +93,7 @@ public class ScheduleAfterDebounceTime {
    * and all pending enqueued tasks will be cancelled.
    */
   public synchronized void stopScheduler() {
-    scheduledExecutorService.shutdownNow();
+    scheduledExecutorService.shutdown();
 
     // Clear the existing future handles.
     futureHandles.clear();
