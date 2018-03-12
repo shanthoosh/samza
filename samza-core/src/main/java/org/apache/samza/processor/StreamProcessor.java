@@ -21,10 +21,8 @@ package org.apache.samza.processor;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+
 import org.apache.samza.SamzaContainerStatus;
 import org.apache.samza.annotation.InterfaceStability;
 import org.apache.samza.config.Config;
@@ -73,9 +71,11 @@ public class StreamProcessor {
   // stopped due to re-balancing
   /* package private */volatile CountDownLatch jcContainerShutdownLatch;
   private volatile boolean processorOnStartCalled = false;
+  private volatile boolean isContainerRunning = false;
 
   @VisibleForTesting
   JobCoordinatorListener jobCoordinatorListener = null;
+  private Future<?> scheduledSamzaContainerFuture = null;
 
   /**
    * Create an instance of StreamProcessor that encapsulates a JobCoordinator and Samza Container
@@ -180,7 +180,7 @@ public class StreamProcessor {
     if (container != null) {
       try {
         LOGGER.info("Shutting down container " + container.toString() + " from StreamProcessor");
-        container.shutdown();
+        stopSamzaContainer();
         containerShutdownInvoked = true;
       } catch (IllegalContainerStateException icse) {
         LOGGER.info("Container was not running", icse);
@@ -194,52 +194,57 @@ public class StreamProcessor {
 
   }
 
-  SamzaContainer createSamzaContainer(String processorId, JobModel jobModel) {
-    return SamzaContainer.apply(
-        processorId,
-        jobModel,
-        config,
-        Util.<String, MetricsReporter>javaMapAsScalaMap(customMetricsReporter),
-        taskFactory);
+  private synchronized void startSamzaContainer(SamzaContainerListener containerListener, String processorId, JobModel jobModel) {
+    container = SamzaContainer.apply(processorId, jobModel, config, Util.javaMapAsScalaMap(customMetricsReporter), taskFactory);
+    container.setContainerListener(containerListener);
+    LOGGER.info("Starting the container: {} for the stream processor: {}.", container, processorId);
+    ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat(String.format("CONTAINER_THREAD_NAME_FORMAT", processorId))
+                                                            .setDaemon(true).build();
+    executorService = Executors.newSingleThreadExecutor(threadFactory);
+    scheduledSamzaContainerFuture = executorService.submit(container::run);
+    isContainerRunning = true;
   }
+
+  private synchronized void stopSamzaContainer() {
+    if (isContainerRunning && container != null) {
+      boolean shutdownComplete = false;
+      try {
+        LOGGER.info("Shutting down the container: {} of stream processor: {} in onJobModelExpired.", container, processorId);
+        container.shutdown();
+        shutdownComplete = jcContainerShutdownLatch.await(taskShutdownMs, TimeUnit.MILLISECONDS);
+        LOGGER.info("Container shutdown completion status is: {} for stream processor: {}.", shutdownComplete, processorId);
+      } catch (IllegalContainerStateException icse) {
+        // Ignored since container is not running
+        LOGGER.info(String.format("Container: %s of stream processor: %s is dead. Shutdown is NO-OP.", container, processorId), icse);
+        shutdownComplete = true;
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        LOGGER.warn(String.format("Shutdown of the container: %s was interrupted", container), e);
+      }
+      if (!shutdownComplete) {
+        LOGGER.warn("Container: {} shutdown was unsuccessful. Stopping the stream processor: {}.", container, processorId);
+        if (scheduledSamzaContainerFuture != null && !scheduledSamzaContainerFuture.isDone()) {
+          LOGGER.info(String.format("Container: %s did not shutdown after %s milliseconds. Interrupting the container thread of stream processor: %s.", container, taskShutdownMs, processorId));
+          scheduledSamzaContainerFuture.cancel(true);
+        }
+        container = null;
+        stop();
+      } else {
+        LOGGER.debug("Container shutdown completed for stream processor: {}.", processorId);
+      }
+      isContainerRunning = false;
+    } else {
+      LOGGER.debug("Container is not running for the stream processor: {}.", processorId);
+    }
+  }
+
 
   JobCoordinatorListener createJobCoordinatorListener() {
     return new JobCoordinatorListener() {
 
       @Override
       public void onJobModelExpired() {
-        if (container != null) {
-          SamzaContainerStatus status = container.getStatus();
-          if (SamzaContainerStatus.NOT_STARTED.equals(status) || SamzaContainerStatus.STARTED.equals(status)) {
-            boolean shutdownComplete = false;
-            try {
-              LOGGER.info("Shutting down container in onJobModelExpired for processor:" + processorId);
-              container.pause();
-              shutdownComplete = jcContainerShutdownLatch.await(taskShutdownMs, TimeUnit.MILLISECONDS);
-              LOGGER.info("ShutdownComplete=" + shutdownComplete);
-            } catch (IllegalContainerStateException icse) {
-              // Ignored since container is not running
-              LOGGER.info("Container was not running.", icse);
-              shutdownComplete = true;
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-              LOGGER.warn("Container shutdown was interrupted!" + container.toString(), e);
-            }
-            LOGGER.info("Shutting down container done for pid=" + processorId + "; complete =" + shutdownComplete);
-            if (!shutdownComplete) {
-              LOGGER.warn("Container " + container.toString() + " may not have shutdown successfully. " +
-                  "Stopping the processor.");
-              container = null;
-              stop();
-            } else {
-              LOGGER.debug("Container " + container.toString() + " shutdown successfully");
-            }
-          } else {
-            LOGGER.debug("Container " + container.toString() + " is not running.");
-          }
-        } else {
-          LOGGER.debug("Container is not instantiated yet.");
-        }
+        stopSamzaContainer();
       }
 
       @Override
@@ -263,16 +268,14 @@ public class StreamProcessor {
 
           @Override
           public void onContainerStop(boolean pauseByJm) {
-            if (pauseByJm) {
-              LOGGER.info("Container " + container.toString() + " stopped due to a request from JobCoordinator.");
-              if (jcContainerShutdownLatch != null) {
-                jcContainerShutdownLatch.countDown();
-              }
-            } else {  // sp.stop was called or container stopped by itself
-              LOGGER.info("Container " + container.toString() + " stopped.");
-              container = null; // this guarantees that stop() doesn't try to stop container again
-              stop();
+            LOGGER.info("Container: {} of the stream processor: {} is stopped by the JobCoordinator.", container, processorId);
+            if (jcContainerShutdownLatch != null) {
+              jcContainerShutdownLatch.countDown();
             }
+            LOGGER.info("Container: {} stopped. Stopping the stream processor: {}.", container, processorId);
+            container = null;
+            scheduledSamzaContainerFuture = null;
+            stop();
           }
 
           @Override
@@ -285,16 +288,12 @@ public class StreamProcessor {
             containerException = t;
             LOGGER.error("Container failed. Stopping the processor.", containerException);
             container = null;
+            scheduledSamzaContainerFuture = null;
             stop();
           }
         };
 
-        container = createSamzaContainer(processorId, jobModel);
-        container.setContainerListener(containerListener);
-        LOGGER.info("Starting container " + container.toString());
-        executorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-            .setNameFormat("p-" + processorId + "-container-thread-%d").build());
-        executorService.submit(container::run);
+        startSamzaContainer(containerListener, processorId, jobModel);
       }
 
       @Override
