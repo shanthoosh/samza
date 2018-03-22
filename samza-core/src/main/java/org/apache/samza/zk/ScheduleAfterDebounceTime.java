@@ -56,6 +56,7 @@ public class ScheduleAfterDebounceTime {
    * A map from actionName to {@link ScheduledFuture} of task scheduled for execution.
    */
   private final Map<String, ScheduledFuture> futureHandles = new HashMap<>();
+  private volatile boolean isStopped = false;
 
   public ScheduleAfterDebounceTime() {
     ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat(DEBOUNCE_THREAD_NAME_FORMAT).setDaemon(true).build();
@@ -93,10 +94,15 @@ public class ScheduleAfterDebounceTime {
    * and all pending enqueued tasks will be cancelled.
    */
   public synchronized void stopScheduler() {
-    scheduledExecutorService.shutdownNow();
+    try {
+      LOG.info("Stopping the debounce timer.");
+      scheduledExecutorService.shutdown();
 
-    // Clear the existing future handles.
-    futureHandles.clear();
+      // Clear the existing future handles.
+      futureHandles.clear();
+    } finally {
+      isStopped = true;
+    }
   }
 
   /**
@@ -136,8 +142,8 @@ public class ScheduleAfterDebounceTime {
          * Expects all run() implementations <b>not to swallow the interrupts.</b>
          * This thread is interrupted from an external source(mostly executor service) to die.
          */
-        if (Thread.currentThread().isInterrupted()) {
-          LOG.warn("Action: {} is interrupted.", actionName);
+        if (isStopped) {
+          LOG.warn("Debounce timer was stopped during the execution of action: {}.", actionName);
           doCleanUpOnTaskException(new InterruptedException());
         } else {
           LOG.debug("Action: {} completed successfully.", actionName);
