@@ -32,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.samza.Partition;
+import org.apache.samza.checkpoint.Checkpoint;
 import org.apache.samza.checkpoint.OffsetManager;
 import org.apache.samza.config.Config;
 import org.apache.samza.container.SamzaContainerContext;
@@ -46,9 +47,10 @@ import org.apache.samza.system.SystemConsumer;
 import org.apache.samza.system.SystemConsumers;
 import org.apache.samza.system.SystemStreamPartition;
 import org.apache.samza.system.TestSystemConsumers;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 
+import org.junit.rules.Timeout;
 import scala.Option;
 import scala.collection.JavaConverters;
 
@@ -58,13 +60,10 @@ import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Mockito.*;
 
-// TODO(spvenkat) SAMZA-1183: Fix all commented out tests.
 public class TestAsyncRunLoop {
   // Immutable objects shared by all test methods.
   private final ExecutorService executor = null;
-  private final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
   private final SamzaContainerMetrics containerMetrics = new SamzaContainerMetrics("container", new MetricsRegistryMap());
-  private final OffsetManager offsetManager = mock(OffsetManager.class);
   private final long windowMs = -1;
   private final long commitMs = -1;
   private final long callbackTimeoutMs = 0;
@@ -90,10 +89,6 @@ public class TestAsyncRunLoop {
         new scala.collection.immutable.HashSet<String>()), null, null, null);
   }
 
-  TaskInstance createTaskInstance(AsyncStreamTask task, TaskName taskName, SystemStreamPartition ssp) {
-    return createTaskInstance(task, taskName, ssp, offsetManager, consumerMultiplexer);
-  }
-
   interface TestCode {
     void run(TaskCallback callback);
   }
@@ -104,8 +99,6 @@ public class TestAsyncRunLoop {
     private final boolean success;
     private final ExecutorService callbackExecutor = Executors.newFixedThreadPool(4);
 
-    private int processed = 0;
-    private int committed = 0;
     private AtomicInteger completed = new AtomicInteger(0);
     private TestCode callbackHandler = null;
     private TestCode commitHandler = null;
@@ -115,6 +108,8 @@ public class TestAsyncRunLoop {
     private CountDownLatch processedMessagesLatch = null;
 
     private volatile int windowCount = 0;
+    private volatile int processed = 0;
+    private volatile int committed = 0;
 
     private int maxMessagesInFlight;
 
@@ -132,11 +127,14 @@ public class TestAsyncRunLoop {
     }
 
     @Override
-    public void processAsync(IncomingMessageEnvelope envelope, MessageCollector collector, TaskCoordinator coordinator,
-        TaskCallback callback) {
+    public void processAsync(IncomingMessageEnvelope envelope, MessageCollector collector, TaskCoordinator coordinator, TaskCallback callback) {
 
       if (maxMessagesInFlight == 1) {
-        assertEquals(processed, completed.get());
+        try {
+          assertEquals(processed, completed.get());
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
       }
 
       processed++;
@@ -197,20 +195,21 @@ public class TestAsyncRunLoop {
     }
   }
 
-  @Before
-  public void setup() {
-    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
-  }
+  @Rule
+  public Timeout testTimeOutInMillis = Timeout.seconds(120);
 
   @Test
   public void testMetrics() throws Exception {
     CountDownLatch task0ProcessedMessages = new CountDownLatch(2);
     CountDownLatch task1ProcessedMessages = new CountDownLatch(1);
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessages);
     TestTask task1 = new TestTask(true, true, false, task1ProcessedMessages);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
     tasks.put(taskName0, t0);
@@ -221,14 +220,7 @@ public class TestAsyncRunLoop {
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
         callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
 
-    when(consumerMultiplexer.choose(false))
-        .thenReturn(envelope0)
-        .thenReturn(envelope3)
-        .thenReturn(envelope1)
-        .thenReturn(null)
-        .thenReturn(ssp0EndOfStream)
-        .thenReturn(ssp1EndOfStream)
-        .thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0, envelope3, envelope1, null, ssp0EndOfStream, ssp1EndOfStream, null);
 
     runLoop.run();
 
@@ -241,15 +233,18 @@ public class TestAsyncRunLoop {
     assertEquals(3L, containerMetrics.processes().getCount());
   }
 
-  //@Test
+  @Test
   public void testProcessMultipleTasks() throws Exception {
     CountDownLatch task0ProcessedMessages = new CountDownLatch(1);
     CountDownLatch task1ProcessedMessages = new CountDownLatch(1);
+    SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    OffsetManager offsetManager = mock(OffsetManager.class);
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessages);
-    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessages);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TestTask task1 = new TestTask(true, false, false, task1ProcessedMessages);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
     tasks.put(taskName0, t0);
@@ -272,15 +267,18 @@ public class TestAsyncRunLoop {
     assertEquals(2L, containerMetrics.processes().getCount());
   }
 
-  //@Test
+  @Test
   public void testProcessInOrder() throws Exception {
     CountDownLatch task0ProcessedMessages = new CountDownLatch(2);
     CountDownLatch task1ProcessedMessages = new CountDownLatch(1);
+    SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    OffsetManager offsetManager = mock(OffsetManager.class);
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessages);
-    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessages);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TestTask task1 = new TestTask(true, false, false, task1ProcessedMessages);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
     tasks.put(taskName0, t0);
@@ -289,7 +287,7 @@ public class TestAsyncRunLoop {
     int maxMessagesInFlight = 1;
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope3).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0, envelope3, envelope1, ssp0EndOfStream, ssp1EndOfStream, null);
     runLoop.run();
 
     // Wait till the tasks completes processing all the messages.
@@ -300,7 +298,7 @@ public class TestAsyncRunLoop {
     assertEquals(2, task0.completed.get());
     assertEquals(1, task1.processed);
     assertEquals(1, task1.completed.get());
-    assertEquals(3L, containerMetrics.envelopes().getCount());
+    assertEquals(5L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
   }
 
@@ -310,7 +308,7 @@ public class TestAsyncRunLoop {
       @Override
       public void run(TaskCallback callback) {
         IncomingMessageEnvelope envelope = ((TaskCallbackImpl) callback).envelope;
-        if (envelope == envelope0) {
+        if (envelope.equals(envelope0)) {
           // process first message will wait till the second one is processed
           try {
             latch.await();
@@ -326,27 +324,30 @@ public class TestAsyncRunLoop {
     };
   }
 
-  //@Test
+  @Test
   public void testProcessOutOfOrder() throws Exception {
     int maxMessagesInFlight = 2;
 
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(2);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
 
-    TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch,  maxMessagesInFlight);
-    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch, maxMessagesInFlight);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    OffsetManager offsetManager = mock(OffsetManager.class);
+
+    TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch, maxMessagesInFlight);
+    TestTask task1 = new TestTask(true, false, false, task1ProcessedMessagesLatch, maxMessagesInFlight);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
     tasks.put(taskName0, t0);
     tasks.put(taskName1, t1);
 
     task0.callbackHandler = buildOutofOrderCallback(task0);
-
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope3).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0, envelope3, envelope1, ssp0EndOfStream, ssp1EndOfStream, null);
     runLoop.run();
 
     task0ProcessedMessagesLatch.await();
@@ -356,16 +357,21 @@ public class TestAsyncRunLoop {
     assertEquals(2, task0.completed.get());
     assertEquals(1, task1.processed);
     assertEquals(1, task1.completed.get());
-    assertEquals(3L, containerMetrics.envelopes().getCount());
+    assertEquals(5L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
   }
 
-  //@Test
+  @Test
   public void testWindow() throws Exception {
     TestTask task0 = new TestTask(true, true, false, null);
     TestTask task1 = new TestTask(true, false, true, null);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+
+    SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    OffsetManager offsetManager = mock(OffsetManager.class);
+
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
     tasks.put(taskName0, t0);
@@ -381,18 +387,21 @@ public class TestAsyncRunLoop {
     assertEquals(4, task1.windowCount);
   }
 
-  // TODO fix in SAMZA-1183
-  // @Test
+  @Test
   public void testCommitSingleTask() throws Exception {
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(1);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
 
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
+
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch);
     task0.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
-    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch);
+    TestTask task1 = new TestTask(true, false, false, task1ProcessedMessagesLatch);
     task1.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
     tasks.put(taskName0, t0);
@@ -402,74 +411,82 @@ public class TestAsyncRunLoop {
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
     //have a null message in between to make sure task0 finishes processing and invoke the commit
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(null).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0, null, envelope1, ssp0EndOfStream, ssp1EndOfStream, null);
     runLoop.run();
 
     task0ProcessedMessagesLatch.await();
     task1ProcessedMessagesLatch.await();
 
     verify(offsetManager).buildCheckpoint(taskName0);
-    verify(offsetManager).writeCheckpoint(taskName0, any());
+    verify(offsetManager).writeCheckpoint(eq(taskName0), any(Checkpoint.class));
     verify(offsetManager, never()).buildCheckpoint(taskName1);
-    verify(offsetManager, never()).writeCheckpoint(taskName1, any());
+    verify(offsetManager, never()).writeCheckpoint(eq(taskName1), any(Checkpoint.class));
   }
 
-  //@Test
+  @Test
   public void testCommitAllTasks() throws Exception {
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(1);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
+
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch);
     task0.setCommitRequest(TaskCoordinator.RequestScope.ALL_TASKS_IN_CONTAINER);
     TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch);
     task1.setCommitRequest(TaskCoordinator.RequestScope.ALL_TASKS_IN_CONTAINER);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
     tasks.put(taskName0, t0);
     tasks.put(taskName1, t1);
     int maxMessagesInFlight = 1;
-
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
     //have a null message in between to make sure task0 finishes processing and invoke the commit
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(null).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0, null, envelope1, null);
     runLoop.run();
 
     task0ProcessedMessagesLatch.await();
     task1ProcessedMessagesLatch.await();
 
     verify(offsetManager).buildCheckpoint(taskName0);
-    verify(offsetManager).writeCheckpoint(taskName0, any());
+    verify(offsetManager).writeCheckpoint(eq(taskName0), any(Checkpoint.class));
     verify(offsetManager).buildCheckpoint(taskName1);
-    verify(offsetManager).writeCheckpoint(taskName1, any());
+    verify(offsetManager).writeCheckpoint(eq(taskName1), any(Checkpoint.class));
   }
 
-  //@Test
+  @Test
   public void testShutdownOnConsensus() throws Exception {
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(1);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
+
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
 
     TestTask task0 = new TestTask(true, true, true, task0ProcessedMessagesLatch);
     task0.setShutdownRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
     TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch);
     task1.setShutdownRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
     tasks.put(taskName0, t0);
     tasks.put(taskName1, t1);
 
-    tasks.put(taskName0, createTaskInstance(task0, taskName0, ssp0));
-    tasks.put(taskName1, createTaskInstance(task1, taskName1, ssp1));
+    tasks.put(taskName0, createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer));
+    tasks.put(taskName1, createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer));
+
     int maxMessagesInFlight = 1;
 
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
     // consensus is reached after envelope1 is processed.
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0, envelope1, null);
     runLoop.run();
 
     task0ProcessedMessagesLatch.await();
@@ -483,15 +500,19 @@ public class TestAsyncRunLoop {
     assertEquals(2L, containerMetrics.processes().getCount());
   }
 
-  //@Test
+  @Test
   public void testEndOfStreamWithMultipleTasks() throws Exception {
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(1);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
 
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
+
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch);
     TestTask task1 = new TestTask(true, true, false, task1ProcessedMessagesLatch);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
 
@@ -521,17 +542,21 @@ public class TestAsyncRunLoop {
     assertEquals(2L, containerMetrics.processes().getCount());
   }
 
-  //@Test
+  @Test
   public void testEndOfStreamWithOutOfOrderProcess() throws Exception {
     int maxMessagesInFlight = 2;
 
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(2);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
 
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
+
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch, maxMessagesInFlight);
     TestTask task1 = new TestTask(true, true, false, task1ProcessedMessagesLatch, maxMessagesInFlight);
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
 
@@ -541,14 +566,7 @@ public class TestAsyncRunLoop {
     task0.callbackHandler = buildOutofOrderCallback(task0);
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
-    when(consumerMultiplexer.choose(false))
-        .thenReturn(envelope0)
-        .thenReturn(envelope3)
-        .thenReturn(envelope1)
-        .thenReturn(null)
-        .thenReturn(ssp0EndOfStream)
-        .thenReturn(ssp1EndOfStream)
-        .thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0, envelope3, envelope1, null, ssp0EndOfStream, ssp1EndOfStream, null);
 
     runLoop.run();
 
@@ -563,33 +581,30 @@ public class TestAsyncRunLoop {
     assertEquals(3L, containerMetrics.processes().getCount());
   }
 
-  //@Test
+  @Test
   public void testEndOfStreamCommitBehavior() throws Exception {
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(1);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
+
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
 
     //explicitly configure to disable commits inside process or window calls and invoke commit from end of stream
     TestTask task0 = new TestTask(true, false, false, task0ProcessedMessagesLatch);
     TestTask task1 = new TestTask(true, false, false, task1ProcessedMessagesLatch);
 
-    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
-    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
+    TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
+    TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
 
     tasks.put(taskName0, t0);
     tasks.put(taskName1, t1);
     int maxMessagesInFlight = 1;
-
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight , windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
-
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0)
-        .thenReturn(envelope1)
-        .thenReturn(null)
-        .thenReturn(ssp0EndOfStream)
-        .thenReturn(ssp1EndOfStream)
-        .thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0, envelope1, null, ssp0EndOfStream, ssp1EndOfStream, null);
 
     runLoop.run();
 
@@ -597,13 +612,12 @@ public class TestAsyncRunLoop {
     task1ProcessedMessagesLatch.await();
 
     verify(offsetManager).buildCheckpoint(taskName0);
-    verify(offsetManager).writeCheckpoint(taskName0, any());
+    verify(offsetManager).writeCheckpoint(eq(taskName0), any(Checkpoint.class));
     verify(offsetManager).buildCheckpoint(taskName1);
-    verify(offsetManager).writeCheckpoint(taskName1, any());
+    verify(offsetManager).writeCheckpoint(eq(taskName1), any(Checkpoint.class));
   }
 
-  // TODO: Add assertions.
-  //@Test
+  @Test
   public void testEndOfStreamOffsetManagement() throws Exception {
     //explicitly configure to disable commits inside process or window calls and invoke commit from end of stream
     TestTask mockStreamTask1 = new TestTask(true, false, false, null);
@@ -661,13 +675,17 @@ public class TestAsyncRunLoop {
     runLoop.run();
   }
 
-  //@Test
+  @Test
   public void testCommitBehaviourWhenAsyncCommitIsEnabled() throws InterruptedException {
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
+
     int maxMessagesInFlight = 3;
     TestTask task0 = new TestTask(true, true, false, null,
                                   maxMessagesInFlight);
     task0.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
-    TestTask task1 = new TestTask(true, false, true, null);
+    TestTask task1 = new TestTask(true, false, false, null);
     task1.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
     IncomingMessageEnvelope firstMsg = new IncomingMessageEnvelope(ssp0, "0", "key0", "value0");
     IncomingMessageEnvelope secondMsg = new IncomingMessageEnvelope(ssp0, "1", "key1", "value1");
@@ -686,9 +704,9 @@ public class TestAsyncRunLoop {
         } else if (envelope.equals(thirdMsg)) {
           secondMsgCompletionLatch.countDown();
           // OffsetManager.update with firstMsg offset, task.commit has happened when second message callback has not completed.
-          verify(offsetManager).update(taskName0, firstMsg.getSystemStreamPartition(), firstMsg.getOffset());
-          verify(offsetManager, atLeastOnce()).buildCheckpoint(taskName0);
-          verify(offsetManager, atLeastOnce()).writeCheckpoint(taskName0, any());
+          verify(offsetManager).update(eq(taskName0), eq(firstMsg.getSystemStreamPartition()), eq(firstMsg.getOffset()));
+          verify(offsetManager, atLeastOnce()).buildCheckpoint(eq(taskName0));
+          verify(offsetManager, atLeastOnce()).writeCheckpoint(eq(taskName0), any(Checkpoint.class));
         }
       } catch (Exception e) {
         e.printStackTrace();
@@ -697,13 +715,10 @@ public class TestAsyncRunLoop {
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
 
-    tasks.put(taskName0, createTaskInstance(task0, taskName0, ssp0));
-    tasks.put(taskName1, createTaskInstance(task1, taskName1, ssp1));
-    when(consumerMultiplexer.choose(false)).thenReturn(firstMsg)
-                                           .thenReturn(secondMsg)
-                                           .thenReturn(thirdMsg)
-                                           .thenReturn(envelope1)
-                                           .thenReturn(null);
+    tasks.put(taskName0, createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer));
+    tasks.put(taskName1, createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer));
+    when(consumerMultiplexer.choose(false)).thenReturn(firstMsg, secondMsg, thirdMsg, envelope1, ssp0EndOfStream, ssp1EndOfStream, null);
+
 
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, true);
@@ -719,14 +734,21 @@ public class TestAsyncRunLoop {
     assertEquals(0, task1.committed);
   }
 
-  //@Test
+  @Test
   public void testProcessBehaviourWhenAsyncCommitIsEnabled() throws InterruptedException {
     int maxMessagesInFlight = 2;
+
+    final SystemConsumers consumerMultiplexer = mock(SystemConsumers.class);
+    when(consumerMultiplexer.pollIntervalMs()).thenReturn(10);
+    final OffsetManager offsetManager = mock(OffsetManager.class);
+
     TestTask task0 = new TestTask(true, true, false, null, maxMessagesInFlight);
-    TestTask task1 = new TestTask(true, false, true, null);
     CountDownLatch commitLatch = new CountDownLatch(1);
     task0.commitHandler = callback -> {
       TaskCallbackImpl taskCallback = (TaskCallbackImpl) callback;
+      System.out.println("HO HO HO ! Here-1 In commit handler.");
+      System.out.println(taskCallback.envelope);
+      System.out.println(envelope3);
       if (taskCallback.envelope.equals(envelope3)) {
         try {
           commitLatch.await();
@@ -737,23 +759,28 @@ public class TestAsyncRunLoop {
     };
 
     task0.callbackHandler = callback -> {
-      TaskCallbackImpl taskCallback = (TaskCallbackImpl) callback;
-      if (taskCallback.envelope.equals(envelope0)) {
-        // Both the process call has gone through when the first commit is in progress.
-        assertEquals(2, containerMetrics.processes().getCount());
-        assertEquals(0, containerMetrics.commits().getCount());
-        commitLatch.countDown();
+      try {
+        TaskCallbackImpl taskCallback = (TaskCallbackImpl) callback;
+        System.out.println("HO HO HO ! Here-2");
+        System.out.println(taskCallback.envelope);
+        System.out.println(envelope0);
+        if (taskCallback.envelope.equals(envelope0)) {
+          // Both the process call has gone through when the first commit is in progress.
+          System.out.println(containerMetrics.processes().getCount());
+          System.out.println(containerMetrics.commits().getCount());
+          assertEquals(2, containerMetrics.processes().getCount());
+          assertEquals(0, containerMetrics.commits().getCount());
+          commitLatch.countDown();
+        }
+      } catch (Exception e) {
+        e.printStackTrace();
       }
     };
 
     Map<TaskName, TaskInstance> tasks = new HashMap<>();
 
-    tasks.put(taskName0, createTaskInstance(task0, taskName0, ssp0));
-    tasks.put(taskName1, createTaskInstance(task1, taskName1, ssp1));
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope3)
-                                           .thenReturn(envelope0)
-                                           .thenReturn(envelope1)
-                                           .thenReturn(null);
+    tasks.put(taskName0, createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer));
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope3, envelope0, ssp0EndOfStream, null);
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, true);
 

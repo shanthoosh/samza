@@ -673,10 +673,12 @@ public class AsyncRunLoop implements Runnable, Throttleable {
      *
      */
     private boolean isReady() {
+      System.out.println(coordinatorRequests.commitRequests());
       if (checkEndOfStream()) {
         endOfStream = true;
       }
       if (coordinatorRequests.commitRequests().remove(taskName)) {
+        System.out.println("Need commit is set to true");
         needCommit = true;
       }
 
@@ -712,7 +714,9 @@ public class AsyncRunLoop implements Runnable, Throttleable {
 
       if (complete) return WorkerOp.NO_OP;
 
-      if (isReady()) {
+      boolean isReadyValue = isReady();
+      System.out.println("IsReadyValue : " + isReadyValue + " for task: " + taskName);
+      if (isReadyValue) {
         if (needCommit) return WorkerOp.COMMIT;
         else if (needWindow) return WorkerOp.WINDOW;
         else if (needTimer) return WorkerOp.TIMER;
@@ -782,6 +786,8 @@ public class AsyncRunLoop implements Runnable, Throttleable {
       taskMetrics.pendingMessages().set(queueSize);
       log.trace("Insert envelope to task {} queue.", taskName);
       log.debug("Task {} pending envelope count is {} after insertion.", taskName, queueSize);
+      System.out.println("Insert envelope to task {} queue." +  taskName);
+
     }
 
 
