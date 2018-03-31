@@ -142,9 +142,9 @@ public class TestAsyncRunLoop {
 
       if (maxMessagesInFlight == 1) {
         try{
-        assertEquals(processed, completed.get());
+          assertEquals(processed, completed.get());
         } catch(Exception e) {
- 	   e.printStackTrace();
+          e.printStackTrace();
         }
       }
 
@@ -393,7 +393,7 @@ public class TestAsyncRunLoop {
     assertEquals(4, task1.windowCount);
   }
 
-   @Test
+  @Test
   public void testCommitSingleTask() throws Exception {
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(1);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
@@ -750,19 +750,20 @@ public class TestAsyncRunLoop {
 
     task0.callbackHandler = callback -> {
       try {
-      TaskCallbackImpl taskCallback = (TaskCallbackImpl) callback;
-      System.out.println("HO HO HO ! Here-2");
-      System.out.println(taskCallback.envelope);
-      System.out.println(envelope0);
-      if (taskCallback.envelope.equals(envelope0)) {
-        // Both the process call has gone through when the first commit is in progress.
-        System.out.println(containerMetrics.processes().getCount());
-        System.out.println(containerMetrics.commits().getCount());
-        assertEquals(2, containerMetrics.processes().getCount());
-        assertEquals(0, containerMetrics.commits().getCount());
-        commitLatch.countDown();
-      } } catch(Exception e) {
-          e.printStackTrace();
+        TaskCallbackImpl taskCallback = (TaskCallbackImpl) callback;
+        System.out.println("HO HO HO ! Here-2");
+        System.out.println(taskCallback.envelope);
+        System.out.println(envelope0);
+        if (taskCallback.envelope.equals(envelope0)) {
+          // Both the process call has gone through when the first commit is in progress.
+          System.out.println(containerMetrics.processes().getCount());
+          System.out.println(containerMetrics.commits().getCount());
+          assertEquals(2, containerMetrics.processes().getCount());
+          assertEquals(0, containerMetrics.commits().getCount());
+          commitLatch.countDown();
+        }
+      } catch(Exception e) {
+        e.printStackTrace();
       }
     };
 
