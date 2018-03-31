@@ -782,6 +782,8 @@ public class AsyncRunLoop implements Runnable, Throttleable {
       taskMetrics.pendingMessages().set(queueSize);
       log.trace("Insert envelope to task {} queue.", taskName);
       log.debug("Task {} pending envelope count is {} after insertion.", taskName, queueSize);
+      System.out.println("Insert envelope to task {} queue." +  taskName);
+
     }
 
 

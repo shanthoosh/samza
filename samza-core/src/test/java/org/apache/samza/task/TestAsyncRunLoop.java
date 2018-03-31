@@ -107,7 +107,7 @@ public class TestAsyncRunLoop {
     private final boolean shutdown;
     private final boolean commit;
     private final boolean success;
-    private final ExecutorService callbackExecutor = Executors.newFixedThreadPool(1);
+    private final ExecutorService callbackExecutor = Executors.newFixedThreadPool(4);
 
     private int processed = 0;
     private int committed = 0;
@@ -141,9 +141,9 @@ public class TestAsyncRunLoop {
         TaskCallback callback) {
 
       if (maxMessagesInFlight == 1) {
-        try{
+        try {
           assertEquals(processed, completed.get());
-        } catch(Exception e) {
+        } catch (Exception e) {
           e.printStackTrace();
         }
       }
@@ -212,7 +212,7 @@ public class TestAsyncRunLoop {
   }
 
   @Rule
-  public Timeout testTimeOutInMillis = new Timeout(120000);
+  public Timeout testTimeOutInMillis = Timeout.seconds(120);
 
   @Test
   public void testMetrics() throws Exception {
@@ -322,7 +322,7 @@ public class TestAsyncRunLoop {
       @Override
       public void run(TaskCallback callback) {
         IncomingMessageEnvelope envelope = ((TaskCallbackImpl) callback).envelope;
-        if (envelope == envelope0) {
+        if (envelope.equals(envelope0)) {
           // process first message will wait till the second one is processed
           try {
             latch.await();
@@ -345,7 +345,7 @@ public class TestAsyncRunLoop {
     CountDownLatch task0ProcessedMessagesLatch = new CountDownLatch(2);
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
 
-    TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch,  maxMessagesInFlight);
+    TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch, maxMessagesInFlight);
     TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch, maxMessagesInFlight);
     TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
     TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
@@ -713,7 +713,8 @@ public class TestAsyncRunLoop {
                                            .thenReturn(secondMsg)
                                            .thenReturn(thirdMsg)
                                            .thenReturn(envelope1)
-                                           .thenReturn(null);
+                                           .thenReturn(ssp0EndOfStream)
+                                           .thenReturn(ssp1EndOfStream);
 
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, true);
@@ -736,7 +737,7 @@ public class TestAsyncRunLoop {
     CountDownLatch commitLatch = new CountDownLatch(1);
     task0.commitHandler = callback -> {
       TaskCallbackImpl taskCallback = (TaskCallbackImpl) callback;
-      System.out.println("HO HO HO ! Here-1");
+      System.out.println("HO HO HO ! Here-1 In commit handler.");
       System.out.println(taskCallback.envelope);
       System.out.println(envelope3);
       if (taskCallback.envelope.equals(envelope3)) {
@@ -762,7 +763,7 @@ public class TestAsyncRunLoop {
           assertEquals(0, containerMetrics.commits().getCount());
           commitLatch.countDown();
         }
-      } catch(Exception e) {
+      } catch (Exception e) {
         e.printStackTrace();
       }
     };
@@ -772,7 +773,7 @@ public class TestAsyncRunLoop {
     tasks.put(taskName0, createTaskInstance(task0, taskName0, ssp0));
     when(consumerMultiplexer.choose(false)).thenReturn(envelope3)
                                            .thenReturn(envelope0)
-                                           .thenReturn(null);
+                                           .thenReturn(ssp0EndOfStream);
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, true);
 
