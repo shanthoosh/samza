@@ -656,13 +656,15 @@ public class AsyncRunLoop implements Runnable, Throttleable {
       if (pendingEnvelopeQueue.size() == 1) {
         PendingEnvelope pendingEnvelope = pendingEnvelopeQueue.peek();
         IncomingMessageEnvelope envelope = pendingEnvelope.envelope;
-
+        System.out.println("Got envelope: " + pendingEnvelope.envelope + " called for EOS.");
         if (envelope.isEndOfStream()) {
+          System.out.println("Envelope : " + envelope);
           SystemStreamPartition ssp = envelope.getSystemStreamPartition();
           processingSspSet.remove(ssp);
           if (!hasIntermediateStreams) {
             pendingEnvelopeQueue.remove();
           }
+          System.out.println("ProcessingSspSet: " + processingSspSet);
         }
       }
       return processingSspSet.isEmpty();
@@ -786,10 +788,9 @@ public class AsyncRunLoop implements Runnable, Throttleable {
       taskMetrics.pendingMessages().set(queueSize);
       log.trace("Insert envelope to task {} queue.", taskName);
       log.debug("Task {} pending envelope count is {} after insertion.", taskName, queueSize);
-      System.out.println("Insert envelope to task {} queue." +  taskName);
-
+      System.out.println("Insert envelope to task: " +  taskName + " envelope: " + pendingEnvelope.envelope);
+      System.out.println("Task pending envelope count is after insertion " + taskName + " " + queueSize);
     }
-
 
     /**
      * Fetch the pending envelope in the pending queue for the task to process.
@@ -806,6 +807,7 @@ public class AsyncRunLoop implements Runnable, Throttleable {
       PendingEnvelope pendingEnvelope = pendingEnvelopeQueue.remove();
       int queueSize = pendingEnvelopeQueue.size();
       taskMetrics.pendingMessages().set(queueSize);
+      System.out.println("Fetching envelope: " + pendingEnvelope.envelope + " for taskName: " + taskName + " with queueSize: " + queueSize);
       log.trace("fetch envelope ssp {} offset {} to process.",
           pendingEnvelope.envelope.getSystemStreamPartition(), pendingEnvelope.envelope.getOffset());
       log.debug("Task {} pending envelopes count is {} after fetching.", taskName, queueSize);
