@@ -241,7 +241,7 @@ public class TestAsyncRunLoop {
     OffsetManager offsetManager = mock(OffsetManager.class);
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessages);
-    TestTask task1 = new TestTask(true, false, false, task1ProcessedMessages);
+    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessages);
     TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
     TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
@@ -252,7 +252,13 @@ public class TestAsyncRunLoop {
     int maxMessagesInFlight = 1;
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope3).thenReturn(envelope1).thenReturn(ssp0EndOfStream).thenReturn(ssp1EndOfStream).thenReturn(null);
+    when(consumerMultiplexer.choose(false))
+                            .thenReturn(envelope0)
+                            .thenReturn(envelope3)
+                            .thenAnswer(x -> {
+                                task0ProcessedMessages.await();
+                                return envelope1;
+                              }).thenReturn(null);
     runLoop.run();
 
     // Wait till the tasks completes processing all the messages.
@@ -263,12 +269,12 @@ public class TestAsyncRunLoop {
     assertEquals(2, task0.completed.get());
     assertEquals(1, task1.processed);
     assertEquals(1, task1.completed.get());
-    assertEquals(5L, containerMetrics.envelopes().getCount());
+    assertEquals(3L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
     // Validate metrics.
     assertEquals(2L, t0.metrics().asyncCallbackCompleted().getCount());
     assertEquals(1L, t1.metrics().asyncCallbackCompleted().getCount());
-    assertEquals(5L, containerMetrics.envelopes().getCount());
+    assertEquals(3L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
   }
 
@@ -306,7 +312,7 @@ public class TestAsyncRunLoop {
     OffsetManager offsetManager = mock(OffsetManager.class);
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch, maxMessagesInFlight);
-    TestTask task1 = new TestTask(true, false, false, task1ProcessedMessagesLatch, maxMessagesInFlight);
+    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch, maxMessagesInFlight);
     TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
     TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
@@ -319,10 +325,10 @@ public class TestAsyncRunLoop {
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
     when(consumerMultiplexer.choose(false)).thenReturn(envelope0)
                                                          .thenReturn(envelope3)
-                                                         .thenReturn(envelope1)
-                                                         .thenReturn(ssp0EndOfStream)
-                                                         .thenReturn(ssp1EndOfStream)
-                                                         .thenReturn(null);
+                                                         .thenAnswer(x -> {
+                                                             task0ProcessedMessagesLatch.await();
+                                                             return envelope1;
+                                                           }).thenReturn(null);
 
     runLoop.run();
 
@@ -333,7 +339,7 @@ public class TestAsyncRunLoop {
     assertEquals(2, task0.completed.get());
     assertEquals(1, task1.processed);
     assertEquals(1, task1.completed.get());
-    assertEquals(5L, containerMetrics.envelopes().getCount());
+    assertEquals(3L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
   }
 
@@ -374,8 +380,7 @@ public class TestAsyncRunLoop {
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch);
     task0.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
-    TestTask task1 = new TestTask(true, true, true, task1ProcessedMessagesLatch);
-    task1.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
+    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch);
     TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
     TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
@@ -391,8 +396,8 @@ public class TestAsyncRunLoop {
                                                          .thenAnswer(x -> {
                                                              task0ProcessedMessagesLatch.await();
                                                              return null;
-                                                          }).thenReturn(envelope1)
-                                                           .thenReturn(null);
+                                                           }).thenReturn(envelope1)
+                                                             .thenReturn(null);
 
     runLoop.run();
 
@@ -432,7 +437,7 @@ public class TestAsyncRunLoop {
                                                          .thenAnswer(x -> {
                                                              task0ProcessedMessagesLatch.await();
                                                              return null;
-                                                          })
+                                                           })
                                                          .thenReturn(envelope1)
                                                          .thenReturn(null);
     runLoop.run();
