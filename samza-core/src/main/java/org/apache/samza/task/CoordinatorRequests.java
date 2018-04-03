@@ -44,6 +44,7 @@ public class CoordinatorRequests {
   }
 
   public void update(ReadableCoordinator coordinator) {
+    System.out.println("Received update request for CoordinatorRequests: " + coordinator);
     if (coordinator.commitRequest().isDefined() || coordinator.shutdownRequest().isDefined()) {
       checkCoordinator(coordinator);
     }
@@ -66,11 +67,13 @@ public class CoordinatorRequests {
   private void checkCoordinator(ReadableCoordinator coordinator) {
     if (coordinator.requestedCommitTask()) {
       log.debug("Task {} requested commit for current task only", coordinator.taskName());
+      System.out.println("Task " +  coordinator.taskName() +  " requested commit for current task only");
       taskCommitRequests.add(coordinator.taskName());
     }
 
     if (coordinator.requestedCommitAll()) {
       log.debug("Task {} requested commit for all tasks in the container", coordinator.taskName());
+      System.out.println("Task " +  coordinator.taskName() +  " requested commit for all tasks only");
       taskCommitRequests.addAll(taskNames);
     }
 

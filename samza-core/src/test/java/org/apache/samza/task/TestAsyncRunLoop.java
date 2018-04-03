@@ -109,8 +109,6 @@ public class TestAsyncRunLoop {
     private final boolean success;
     private final ExecutorService callbackExecutor = Executors.newFixedThreadPool(4);
 
-    private int processed = 0;
-    private int committed = 0;
     private AtomicInteger completed = new AtomicInteger(0);
     private TestCode callbackHandler = null;
     private TestCode commitHandler = null;
@@ -120,6 +118,8 @@ public class TestAsyncRunLoop {
     private CountDownLatch processedMessagesLatch = null;
 
     private volatile int windowCount = 0;
+    private volatile int processed = 0;
+    private volatile int committed = 0;
 
     private int maxMessagesInFlight;
 
@@ -139,7 +139,7 @@ public class TestAsyncRunLoop {
     @Override
     public void processAsync(IncomingMessageEnvelope envelope, MessageCollector collector, TaskCoordinator coordinator,
         TaskCallback callback) {
-
+      System.out.println("Called inside process for envelope: " + envelope);
       if (maxMessagesInFlight == 1) {
         try {
           assertEquals(processed, completed.get());
@@ -165,6 +165,7 @@ public class TestAsyncRunLoop {
       }
 
       callbackExecutor.submit(() -> {
+          System.out.println("In callback.executor for envelope: " + envelope);
           if (callbackHandler != null) {
             callbackHandler.run(callback);
           }
@@ -172,8 +173,10 @@ public class TestAsyncRunLoop {
           completed.incrementAndGet();
 
           if (success) {
+            System.out.println("Invoking callback.complete for envelope: " + envelope);
             callback.complete();
           } else {
+            System.out.println("Invoking callback.failure for envelope: " + envelope);
             callback.failure(new Exception("process failure"));
           }
 
@@ -290,7 +293,7 @@ public class TestAsyncRunLoop {
     CountDownLatch task1ProcessedMessages = new CountDownLatch(1);
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessages);
-    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessages);
+    TestTask task1 = new TestTask(true, false, false, task1ProcessedMessages);
     TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
     TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
 
@@ -301,7 +304,7 @@ public class TestAsyncRunLoop {
     int maxMessagesInFlight = 1;
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope3).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope3).thenReturn(envelope1).thenReturn(ssp0EndOfStream).thenReturn(ssp1EndOfStream).thenReturn(null);
     runLoop.run();
 
     // Wait till the tasks completes processing all the messages.
@@ -312,7 +315,7 @@ public class TestAsyncRunLoop {
     assertEquals(2, task0.completed.get());
     assertEquals(1, task1.processed);
     assertEquals(1, task1.completed.get());
-    assertEquals(3L, containerMetrics.envelopes().getCount());
+    assertEquals(5L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
   }
 
@@ -346,7 +349,7 @@ public class TestAsyncRunLoop {
     CountDownLatch task1ProcessedMessagesLatch = new CountDownLatch(1);
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch, maxMessagesInFlight);
-    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch, maxMessagesInFlight);
+    TestTask task1 = new TestTask(true, false, false, task1ProcessedMessagesLatch, maxMessagesInFlight);
     TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0);
     TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1);
 
@@ -358,7 +361,7 @@ public class TestAsyncRunLoop {
 
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope3).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(envelope3).thenReturn(envelope1).thenReturn(ssp0EndOfStream).thenReturn(ssp1EndOfStream).thenReturn(null);
     runLoop.run();
 
     task0ProcessedMessagesLatch.await();
@@ -368,7 +371,7 @@ public class TestAsyncRunLoop {
     assertEquals(2, task0.completed.get());
     assertEquals(1, task1.processed);
     assertEquals(1, task1.completed.get());
-    assertEquals(3L, containerMetrics.envelopes().getCount());
+    assertEquals(5L, containerMetrics.envelopes().getCount());
     assertEquals(3L, containerMetrics.processes().getCount());
   }
 
