@@ -374,7 +374,7 @@ public class TestAsyncRunLoop {
 
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch);
     task0.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
-    TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch);
+    TestTask task1 = new TestTask(true, true, true, task1ProcessedMessagesLatch);
     task1.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
     TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
     TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
@@ -387,7 +387,13 @@ public class TestAsyncRunLoop {
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
     //have a null message in between to make sure task0 finishes processing and invoke the commit
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(null).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0)
+                                                         .thenAnswer(x -> {
+                                                             task0ProcessedMessagesLatch.await();
+                                                             return null;
+                                                          }).thenReturn(envelope1)
+                                                           .thenReturn(null);
+
     runLoop.run();
 
     task0ProcessedMessagesLatch.await();
@@ -411,7 +417,7 @@ public class TestAsyncRunLoop {
     TestTask task0 = new TestTask(true, true, false, task0ProcessedMessagesLatch);
     task0.setCommitRequest(TaskCoordinator.RequestScope.ALL_TASKS_IN_CONTAINER);
     TestTask task1 = new TestTask(true, false, true, task1ProcessedMessagesLatch);
-    task1.setCommitRequest(TaskCoordinator.RequestScope.ALL_TASKS_IN_CONTAINER);
+
     TaskInstance t0 = createTaskInstance(task0, taskName0, ssp0, offsetManager, consumerMultiplexer);
     TaskInstance t1 = createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer);
 
@@ -422,7 +428,13 @@ public class TestAsyncRunLoop {
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, false);
     //have a null message in between to make sure task0 finishes processing and invoke the commit
-    when(consumerMultiplexer.choose(false)).thenReturn(envelope0).thenReturn(null).thenReturn(envelope1).thenReturn(null);
+    when(consumerMultiplexer.choose(false)).thenReturn(envelope0)
+                                                         .thenAnswer(x -> {
+                                                             task0ProcessedMessagesLatch.await();
+                                                             return null;
+                                                          })
+                                                         .thenReturn(envelope1)
+                                                         .thenReturn(null);
     runLoop.run();
 
     task0ProcessedMessagesLatch.await();
@@ -661,7 +673,7 @@ public class TestAsyncRunLoop {
     TestTask task0 = new TestTask(true, true, false, null, maxMessagesInFlight);
     task0.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
     TestTask task1 = new TestTask(true, false, false, null, maxMessagesInFlight);
-    task1.setCommitRequest(TaskCoordinator.RequestScope.CURRENT_TASK);
+
     IncomingMessageEnvelope firstMsg = new IncomingMessageEnvelope(ssp0, "0", "key0", "value0");
     IncomingMessageEnvelope secondMsg = new IncomingMessageEnvelope(ssp0, "1", "key1", "value1");
     IncomingMessageEnvelope thirdMsg = new IncomingMessageEnvelope(ssp0, "2", "key0", "value0");
@@ -680,8 +692,6 @@ public class TestAsyncRunLoop {
           secondMsgCompletionLatch.countDown();
           // OffsetManager.update with firstMsg offset, task.commit has happened when second message callback has not completed.
           verify(offsetManager).update(eq(taskName0), eq(firstMsg.getSystemStreamPartition()), eq(firstMsg.getOffset()));
-          verify(offsetManager, atLeastOnce()).buildCheckpoint(eq(taskName0));
-          verify(offsetManager, atLeastOnce()).writeCheckpoint(eq(taskName0), any(Checkpoint.class));
         }
       } catch (Exception e) {
         e.printStackTrace();
@@ -694,7 +704,6 @@ public class TestAsyncRunLoop {
     tasks.put(taskName1, createTaskInstance(task1, taskName1, ssp1, offsetManager, consumerMultiplexer));
     when(consumerMultiplexer.choose(false)).thenReturn(firstMsg).thenReturn(secondMsg).thenReturn(thirdMsg).thenReturn(envelope1).thenReturn(ssp0EndOfStream).thenReturn(ssp1EndOfStream).thenReturn(null);
 
-
     AsyncRunLoop runLoop = new AsyncRunLoop(tasks, executor, consumerMultiplexer, maxMessagesInFlight, windowMs, commitMs,
                                             callbackTimeoutMs, maxThrottlingDelayMs, containerMetrics, () -> 0L, true);
 
@@ -703,6 +712,8 @@ public class TestAsyncRunLoop {
     firstMsgCompletionLatch.await();
     secondMsgCompletionLatch.await();
 
+    verify(offsetManager, atLeastOnce()).buildCheckpoint(eq(taskName0));
+    verify(offsetManager, atLeastOnce()).writeCheckpoint(eq(taskName0), any(Checkpoint.class));
     assertEquals(3, task0.processed);
     assertEquals(3, task0.committed);
     assertEquals(1, task1.processed);
