@@ -97,6 +97,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   private JobModel newJobModel;
   private int debounceTimeMs;
   private boolean hasCreatedStreams = false;
+  private boolean initiatedShutdown = false;
   private String cachedJobModelVersion = null;
   private Map<TaskName, Integer> changeLogPartitionMap = new HashMap<>();
 
@@ -121,7 +122,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     this.reporters = MetricsReporterLoader.getMetricsReporters(new MetricsConfig(config), processorId);
     debounceTimer = new ScheduleAfterDebounceTime();
     debounceTimer.setScheduledTaskCallback(throwable -> {
-        LOG.error("Received exception from in JobCoordinator Processing!", throwable);
+        LOG.error("Received exception in debounce timer! Stopping the job coordinator", throwable);
         stop();
       });
     systemAdmins = new SystemAdmins(config);
@@ -137,19 +138,50 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
 
   @Override
   public synchronized void stop() {
-    if (coordinatorListener != null) {
-      coordinatorListener.onJobModelExpired();
+    // Make the shutdown idempotent
+    if (initiatedShutdown) {
+      LOG.debug("Job Coordinator shutdown is already in progress!");
+      return;
     }
-    //Setting the isLeader metric to false when the stream processor shuts down because it does not remain the leader anymore
-    metrics.isLeader.set(false);
-    debounceTimer.stopScheduler();
-    zkController.stop();
 
-    shutdownMetrics();
-    if (coordinatorListener != null) {
-      coordinatorListener.onCoordinatorStop();
+    LOG.info("Shutting down Job Coordinator...");
+    initiatedShutdown = true;
+    boolean shutdownSuccessful = false;
+
+    // Notify the metrics about abandoning the leadership. Moving it up the chain in the shutdown sequence so that
+    // in case of unclean shutdown, we get notified about lack of leader and we can set up some alerts around the absence of leader.
+    metrics.isLeader.set(false);
+
+    try {
+      // todo: what does it mean for coordinator listener to be null? why not have it part of constructor?
+      if (coordinatorListener != null) {
+        coordinatorListener.onJobModelExpired();
+      }
+
+      debounceTimer.stopScheduler();
+
+      LOG.debug("Shutting down ZkController.");
+      zkController.stop();
+
+      LOG.debug("Shutting down system admins.");
+      systemAdmins.stop();
+
+      LOG.debug("Shutting down metrics.");
+      shutdownMetrics();
+
+      if (coordinatorListener != null) {
+        coordinatorListener.onCoordinatorStop();
+      }
+
+      shutdownSuccessful = true;
+    } catch (Throwable t) {
+      LOG.error("Encountered errors during job coordinator stop.", t);
+      if (coordinatorListener != null) {
+        coordinatorListener.onCoordinatorFailure(t);
+      }
+    } finally {
+      LOG.info("Job Coordinator shutdown finished with ShutdownComplete=" + shutdownSuccessful);
     }
-    systemAdmins.stop();
   }
 
   private void startMetrics() {
