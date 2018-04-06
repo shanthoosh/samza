@@ -27,6 +27,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +57,8 @@ public class ScheduleAfterDebounceTime {
   /**
    * A map from actionName to {@link ScheduledFuture} of task scheduled for execution.
    */
-  private final Map<String, ScheduledFuture> futureHandles = new HashMap<>();
+  private final Map<String, ScheduledFuture> futureHandles = new ConcurrentHashMap<>();
+  private boolean isShuttingDown;
 
   public ScheduleAfterDebounceTime() {
     ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat(DEBOUNCE_THREAD_NAME_FORMAT).setDaemon(true).build();
@@ -93,10 +96,22 @@ public class ScheduleAfterDebounceTime {
    * and all pending enqueued tasks will be cancelled.
    */
   public synchronized void stopScheduler() {
+    if (isShuttingDown) {
+      LOG.debug("Debounce timer shutdown is already in progress!");
+      return;
+    }
+
+    isShuttingDown = true;
+    LOG.info("Shutting down debounce timer!");
+
+    // changing it back to use shutdown instead to prevent interruptions on the active task
     scheduledExecutorService.shutdown();
 
     // Clear the existing future handles.
     futureHandles.clear();
+    // should clear out the future handles as well
+    futureHandles.keySet()
+        .forEach(this::tryCancelScheduledAction);
   }
 
   /**
