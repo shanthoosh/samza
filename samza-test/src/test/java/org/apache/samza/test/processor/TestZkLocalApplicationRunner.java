@@ -114,8 +114,9 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
   @Rule
   public final ExpectedException expectedException = ExpectedException.none();
 
-  @Before
-  public void setUpTestBed() {
+  @Override
+  public void setUp() {
+    super.setUp();
     String uniqueTestId = UUID.randomUUID().toString();
     testStreamAppName = String.format("test-app-name-%s", uniqueTestId);
     testStreamAppId = String.format("test-app-id-%s", uniqueTestId);
@@ -153,10 +154,9 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
       LOGGER.info("Creating kafka topic: {}.", kafkaTopic);
       TestUtils.createTopic(zkUtils(), kafkaTopic, 1, 1, servers(), new Properties());
     }
-    super.setUp();
   }
 
-  @After
+  @Override
   public void tearDown() {
     if (zookeeper().zookeeper().isRunning()) {
       for (String kafkaTopic : ImmutableList.of(inputKafkaTopic, outputKafkaTopic)) {
@@ -522,13 +522,15 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
 
     processedMessagesLatch1.await();
 
+
+
     // Read new job model after rolling upgrade.
     String newJobModelVersion = zkUtils.getJobModelVersion();
     JobModel newJobModel = zkUtils.getJobModel(newJobModelVersion);
 
     // This should be continuation of last processed message.
     int nextSeenMessageId = Integer.parseInt(messagesProcessed.get(0).getEventData());
-    assertTrue(lastProcessedMessageId <= nextSeenMessageId);
+    assertTrue(String.format("LastProcessedMessage: %d is not less than nextSeenMessage: %d", lastProcessedMessageId, nextSeenMessageId), lastProcessedMessageId <= nextSeenMessageId);
     assertEquals(Integer.parseInt(jobModelVersion) + 1, Integer.parseInt(newJobModelVersion));
     assertEquals(jobModel.getContainers(), newJobModel.getContainers());
   }
