@@ -424,8 +424,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     private static final String ZK_SESSION_ERROR = "ZK_SESSION_ERROR";
 
     @Override
-    public void handleStateChanged(Watcher.Event.KeeperState state)
-        throws Exception {
+    public void handleStateChanged(Watcher.Event.KeeperState state) {
       switch (state) {
         case Expired:
           // if the session has expired it means that all the registration's ephemeral nodes are gone.

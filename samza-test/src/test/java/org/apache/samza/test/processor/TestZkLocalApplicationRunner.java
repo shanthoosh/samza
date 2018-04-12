@@ -109,7 +109,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
   private String testStreamAppId;
 
   @Rule
-  public Timeout testTimeOutInMillis = new Timeout(120000);
+  public Timeout testTimeOutInMillis = new Timeout(150000);
 
   @Rule
   public final ExpectedException expectedException = ExpectedException.none();
@@ -389,28 +389,25 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
 
     StreamApplication streamApp1 = new TestStreamApplication(inputKafkaTopic, outputKafkaTopic, processedMessagesLatch1, null, kafkaEventsConsumedLatch);
     StreamApplication streamApp2 = new TestStreamApplication(inputKafkaTopic, outputKafkaTopic, processedMessagesLatch2, null, kafkaEventsConsumedLatch);
-    StreamApplication streamApp3 = new TestStreamApplication(inputKafkaTopic, outputKafkaTopic, processedMessagesLatch3, null, kafkaEventsConsumedLatch);
 
     // Run stream applications.
     applicationRunner1.run(streamApp1);
     applicationRunner2.run(streamApp2);
-    applicationRunner3.run(streamApp3);
 
     // Wait until all processors have processed a message.
     processedMessagesLatch1.await();
     processedMessagesLatch2.await();
-    processedMessagesLatch3.await();
 
     // Verifications before killing the leader.
     String jobModelVersion = zkUtils.getJobModelVersion();
     JobModel jobModel = zkUtils.getJobModel(jobModelVersion);
-    assertEquals(3, jobModel.getContainers().size());
-    assertEquals(Sets.newHashSet("0000000000", "0000000001", "0000000002"), jobModel.getContainers().keySet());
+    assertEquals(2, jobModel.getContainers().size());
+    assertEquals(Sets.newHashSet("0000000000", "0000000001"), jobModel.getContainers().keySet());
     assertEquals("1", jobModelVersion);
 
     List<String> processorIdsFromZK = zkUtils.getActiveProcessorsIDs(Arrays.asList(PROCESSOR_IDS));
 
-    assertEquals(3, processorIdsFromZK.size());
+    assertEquals(2, processorIdsFromZK.size());
     assertEquals(PROCESSOR_IDS[0], processorIdsFromZK.get(0));
 
     // Kill the leader. Since streamApp1 is the first to join the cluster, it's the leader.
