@@ -418,13 +418,16 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
 
     kafkaEventsConsumedLatch.await();
 
+    StreamApplication streamApp3 = new TestStreamApplication(inputKafkaTopic, outputKafkaTopic, processedMessagesLatch3, null, kafkaEventsConsumedLatch);
+    applicationRunner3.run(streamApp3);
+    processedMessagesLatch3.await();
+
     // Verifications after killing the leader.
     assertEquals(ApplicationStatus.SuccessfulFinish, applicationRunner1.status(streamApp1));
     processorIdsFromZK = zkUtils.getActiveProcessorsIDs(ImmutableList.of(PROCESSOR_IDS[1], PROCESSOR_IDS[2]));
     assertEquals(2, processorIdsFromZK.size());
     assertEquals(PROCESSOR_IDS[1], processorIdsFromZK.get(0));
     jobModelVersion = zkUtils.getJobModelVersion();
-//    assertEquals("2", jobModelVersion);
     jobModel = zkUtils.getJobModel(jobModelVersion);
     assertEquals(Sets.newHashSet("0000000001", "0000000002"), jobModel.getContainers().keySet());
     assertEquals(2, jobModel.getContainers().size());
