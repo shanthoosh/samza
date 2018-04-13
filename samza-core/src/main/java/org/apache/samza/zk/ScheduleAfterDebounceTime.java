@@ -89,6 +89,12 @@ public class ScheduleAfterDebounceTime {
     futureHandles.put(actionName, scheduledFuture);
   }
 
+
+  public synchronized void cancelAction(String action) {
+    this.tryCancelScheduledAction(action);
+  }
+
+
   /**
    * Stops the scheduler. After this invocation no further schedule calls will be accepted
    * and all pending enqueued tasks will be cancelled.

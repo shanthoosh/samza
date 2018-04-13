@@ -210,6 +210,7 @@ public class StreamProcessor {
       public void onJobModelExpired() {
         if (container != null) {
           SamzaContainerStatus status = container.getStatus();
+          String containerId = container.toString();
           if (SamzaContainerStatus.NOT_STARTED.equals(status) || SamzaContainerStatus.STARTED.equals(status)) {
             boolean shutdownComplete = false;
             try {
@@ -223,19 +224,19 @@ public class StreamProcessor {
               shutdownComplete = true;
             } catch (InterruptedException e) {
               Thread.currentThread().interrupt();
-              LOGGER.warn("Container shutdown was interrupted!" + container.toString(), e);
+              LOGGER.warn("Container shutdown was interrupted!" + containerId, e);
             }
             LOGGER.info("Shutting down container done for pid=" + processorId + "; complete =" + shutdownComplete);
             if (!shutdownComplete) {
-              LOGGER.warn("Container " + container.toString() + " may not have shutdown successfully. " +
+              LOGGER.warn("Container " + containerId + " may not have shutdown successfully. " +
                   "Stopping the processor.");
               container = null;
               stop();
             } else {
-              LOGGER.debug("Container " + container.toString() + " shutdown successfully");
+              LOGGER.debug("Container " + containerId + " shutdown successfully");
             }
           } else {
-            LOGGER.debug("Container " + container.toString() + " is not running.");
+            LOGGER.debug("Container " + containerId + " is not running.");
           }
         } else {
           LOGGER.debug("Container is not instantiated yet.");

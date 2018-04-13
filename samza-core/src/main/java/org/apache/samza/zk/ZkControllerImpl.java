@@ -60,6 +60,7 @@ public class ZkControllerImpl implements ZkController {
     // make sure we are connection to a job that uses the same ZK communication protocol version.
     try {
       zkUtils.validateZkVersion();
+
     } catch (SamzaException e) {
       // IMPORTANT: Mismatch of the version, means we are trying to join a job, started by processors with different version.
       // If there are no processors running, this is the place to do the migration to the new
