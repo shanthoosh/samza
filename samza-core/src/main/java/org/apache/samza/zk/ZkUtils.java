@@ -331,6 +331,9 @@ public class ZkUtils {
         LOG.warn("SKIPPING handleDataChanged for " + listenerName +
             " from wrong generation. current generation=" + curGeneration + "; callback generation= " + generation);
         return true;
+      } else {
+        LOG.warn("ALLOWING handleDataChanged for " + listenerName +
+            " from wrong generation. current generation=" + curGeneration + "; callback generation= " + generation);
       }
       return false;
     }
@@ -353,6 +356,9 @@ public class ZkUtils {
         LOG.warn("SKIPPING handleDataChanged for " + listenerName +
             " from wrong generation. curGen=" + curGeneration + "; cb gen= " + generation);
         return true;
+      } else {
+        LOG.warn("ALLOWING handleDataChanged for " + listenerName +
+            " from wrong generation. current generation=" + curGeneration + "; callback generation= " + generation);
       }
       return false;
     }

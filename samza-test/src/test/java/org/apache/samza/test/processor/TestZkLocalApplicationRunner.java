@@ -117,6 +117,14 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
   @Override
   public void setUp() {
     super.setUp();
+
+    LOGGER.info("bootstrap servers");
+    LOGGER.info(bootstrapServers());
+    LOGGER.info(super.brokerList());
+    LOGGER.info(super.bootstrapUrl());
+    LOGGER.info("Zookeeper");
+    LOGGER.info(zkConnect());
+
     String uniqueTestId = UUID.randomUUID().toString();
     testStreamAppName = String.format("test-app-name-%s", uniqueTestId);
     testStreamAppId = String.format("test-app-id-%s", uniqueTestId);
@@ -158,18 +166,16 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
 
   @Override
   public void tearDown() {
-    if (zookeeper().zookeeper().isRunning()) {
-      for (String kafkaTopic : ImmutableList.of(inputKafkaTopic, outputKafkaTopic)) {
-        LOGGER.info("Deleting kafka topic: {}.", kafkaTopic);
-        AdminUtils.deleteTopic(zkUtils(), kafkaTopic);
-      }
-      for (String kafkaTopic : ImmutableList.of(inputSinglePartitionKafkaTopic, outputSinglePartitionKafkaTopic)) {
-        LOGGER.info("Deleting kafka topic: {}.", kafkaTopic);
-        AdminUtils.deleteTopic(zkUtils(), kafkaTopic);
-      }
-      zkUtils.close();
-      super.tearDown();
+    for (String kafkaTopic : ImmutableList.of(inputKafkaTopic, outputKafkaTopic)) {
+      LOGGER.info("Deleting kafka topic: {}.", kafkaTopic);
+      AdminUtils.deleteTopic(zkUtils(), kafkaTopic);
     }
+    for (String kafkaTopic : ImmutableList.of(inputSinglePartitionKafkaTopic, outputSinglePartitionKafkaTopic)) {
+      LOGGER.info("Deleting kafka topic: {}.", kafkaTopic);
+      AdminUtils.deleteTopic(zkUtils(), kafkaTopic);
+    }
+    zkUtils.close();
+    super.tearDown();
   }
 
   private void publishKafkaEvents(String topic, int startIndex, int endIndex, String streamProcessorId) {
@@ -201,6 +207,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
         .put(JobConfig.JOB_NAME(), appName)
         .put(JobConfig.JOB_ID(), appId)
         .put(TaskConfigJava.TASK_SHUTDOWN_MS, TASK_SHUTDOWN_MS)
+        .put(TaskConfig.DROP_PRODUCER_ERROR(), "true")
         .put(JobConfig.JOB_DEBOUNCE_TIME_MS(), JOB_DEBOUNCE_TIME_MS)
         .build();
     Map<String, String> applicationConfig = Maps.newHashMap(samzaContainerConfig);
