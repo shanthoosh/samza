@@ -26,6 +26,7 @@ import org.apache.samza.config.JobConfig;
 import org.apache.samza.config.ZkConfig;
 import org.apache.samza.zk.TestZkUtils;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 
@@ -43,7 +44,7 @@ public class TestZkStreamProcessorFailures extends TestZkStreamProcessorBase {
     return "test_ZK_failure_";
   }
 
-//  @Before
+  @Before
   public void setUp() {
     super.setUp();
   }

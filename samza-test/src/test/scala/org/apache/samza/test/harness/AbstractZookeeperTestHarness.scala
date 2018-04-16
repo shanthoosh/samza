@@ -30,8 +30,8 @@ import javax.security.auth.login.Configuration
  */
 abstract class AbstractZookeeperTestHarness extends Logging {
 
-  val zkConnectionTimeout = 6000
-  val zkSessionTimeout = 6000
+  val zkConnectionTimeout = 60000
+  val zkSessionTimeout = 60000
 
   var zkUtils: ZkUtils = null
   var zookeeper: EmbeddedZookeeper = null
@@ -43,6 +43,12 @@ abstract class AbstractZookeeperTestHarness extends Logging {
   @Before
   def setUp() {
     zookeeper = new EmbeddedZookeeper()
+    /**
+      * Override default session timeout of 6 seconds to 120 seconds. Saves from the following exception:
+      * INFO org.apache.zookeeper.server.ZooKeeperServer - Expiring session 0x162d1cd276b0000, timeout of 6000ms exceeded
+      */
+    zookeeper.zookeeper.setMinSessionTimeout(120000)
+    zookeeper.zookeeper.setMaxSessionTimeout(180000)
     println("zookeeper.server")
     println(zookeeper.zookeeper.getClientPort)
     println(zkConnect)

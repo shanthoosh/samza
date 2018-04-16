@@ -78,7 +78,7 @@ abstract class AbstractKafkaServerTestHarness extends AbstractZookeeperTestHarne
         TestUtils.createServer(config)
       } catch {
         case e: Exception =>
-          println("exception in setup")
+          println("Exception in setup")
           println(e)
           throw e
       }
