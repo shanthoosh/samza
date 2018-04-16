@@ -43,6 +43,11 @@ abstract class AbstractZookeeperTestHarness extends Logging {
   @Before
   def setUp() {
     zookeeper = new EmbeddedZookeeper()
+    println("zookeeper.server")
+    println(zookeeper.zookeeper.getClientPort)
+    println(zkConnect)
+    println("zookeeper.port")
+    println(zookeeper.port)
     zkUtils = ZkUtils(zkConnect, zkSessionTimeout, zkConnectionTimeout, JaasUtils.isZkSecurityEnabled)
   }
 

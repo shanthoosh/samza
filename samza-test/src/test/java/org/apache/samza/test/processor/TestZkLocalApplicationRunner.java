@@ -114,7 +114,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
   @Rule
   public final ExpectedException expectedException = ExpectedException.none();
 
-  @Override
+  @Before
   public void setUp() {
     super.setUp();
 
@@ -164,7 +164,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     }
   }
 
-  @Override
+  @After
   public void tearDown() {
     for (String kafkaTopic : ImmutableList.of(inputKafkaTopic, outputKafkaTopic)) {
       LOGGER.info("Deleting kafka topic: {}.", kafkaTopic);
@@ -424,6 +424,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     // How do you know here that leader has been reelected.
 
     kafkaEventsConsumedLatch.await();
+    publishKafkaEvents(inputKafkaTopic, 0, 2 * NUM_KAFKA_EVENTS, PROCESSOR_IDS[0]);
 
     StreamApplication streamApp3 = new TestStreamApplication(inputKafkaTopic, outputKafkaTopic, processedMessagesLatch3, null, kafkaEventsConsumedLatch);
     applicationRunner3.run(streamApp3);

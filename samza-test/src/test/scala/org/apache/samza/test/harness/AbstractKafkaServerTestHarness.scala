@@ -71,7 +71,18 @@ abstract class AbstractKafkaServerTestHarness extends AbstractZookeeperTestHarne
     super.setUp()
     if (configs.size <= 0)
       throw new KafkaException("Must supply at least one server config.")
-    servers = configs.map(TestUtils.createServer(_)).toBuffer
+    println("Kafka configs")
+    println(configs)
+    servers = configs.map {
+      config =>  try {
+        TestUtils.createServer(config)
+      } catch {
+        case e: Exception =>
+          println("exception in setup")
+          println(e)
+          throw e
+      }
+    }.toBuffer
     brokerList = TestUtils.getBrokerListStrFromServers(servers, securityProtocol)
     alive = new Array[Boolean](servers.length)
     util.Arrays.fill(alive, true)
