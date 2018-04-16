@@ -64,7 +64,6 @@ public class ZkBarrierForVersionUpgrade {
     TIMED_OUT, DONE
   }
 
-
   public ZkBarrierForVersionUpgrade(String barrierRoot, ZkUtils zkUtils, ZkBarrierListener barrierListener) {
     if (zkUtils == null) {
       throw new RuntimeException("Cannot operate ZkBarrierForVersionUpgrade without ZkUtils.");
