@@ -105,9 +105,7 @@ public class ZkUtils {
   public void connect() throws ZkInterruptedException {
     boolean isConnected = zkClient.waitUntilConnected(connectionTimeoutMs, TimeUnit.MILLISECONDS);
     if (!isConnected) {
-      if (metrics != null) {
-        metrics.zkConnectionError.inc();
-      }
+      metrics.zkConnectionError.inc();
       throw new RuntimeException("Unable to connect to Zookeeper within connectionTimeout " + connectionTimeoutMs + "ms. Shutting down!");
     }
   }
@@ -272,16 +270,12 @@ public class ZkUtils {
 
   public void subscribeDataChanges(String path, IZkDataListener dataListener) {
     zkClient.subscribeDataChanges(path, dataListener);
-    if (metrics != null) {
-      metrics.subscriptions.inc();
-    }
+    metrics.subscriptions.inc();
   }
 
   public void subscribeChildChanges(String path, IZkChildListener listener) {
     zkClient.subscribeChildChanges(path, listener);
-    if (metrics != null) {
-      metrics.subscriptions.inc();
-    }
+    metrics.subscriptions.inc();
   }
 
   public void unsubscribeChildChanges(String path, IZkChildListener childListener) {
@@ -290,9 +284,7 @@ public class ZkUtils {
 
   public void writeData(String path, Object object) {
     zkClient.writeData(path, object);
-    if (metrics != null) {
-      metrics.writes.inc();
-    }
+    metrics.writes.inc();
   }
 
   public boolean exists(String path) {
@@ -372,9 +364,7 @@ public class ZkUtils {
   public void subscribeToJobModelVersionChange(GenIZkDataListener dataListener) {
     LOG.info(" subscribing for jm version change at:" + keyBuilder.getJobModelVersionPath());
     zkClient.subscribeDataChanges(keyBuilder.getJobModelVersionPath(), dataListener);
-    if (metrics != null) {
-      metrics.subscriptions.inc();
-    }
+    metrics.subscriptions.inc();
   }
 
   /**
@@ -386,13 +376,14 @@ public class ZkUtils {
    */
   public void publishJobModel(String jobModelVersion, JobModel jobModel) {
     try {
-      ObjectMapper mmapper = SamzaObjectMapper.getObjectMapper();
-      String jobModelStr = mmapper.writerWithDefaultPrettyPrinter().writeValueAsString(jobModel);
-      LOG.info("jobModelAsString=" + jobModelStr);
-      zkClient.createPersistent(keyBuilder.getJobModelPath(jobModelVersion), jobModelStr);
-      LOG.info("wrote jobModel path =" + keyBuilder.getJobModelPath(jobModelVersion));
+      ObjectMapper mapper = SamzaObjectMapper.getObjectMapper();
+      String jobModelStr = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(jobModel);
+      String jobModelPath = keyBuilder.getJobModelPath(jobModelVersion);
+      LOG.info(String.format("Publishing JobModel: %s with version: %s.", jobModelStr, jobModelVersion));
+      zkClient.createPersistent(jobModelPath, jobModelStr);
+      LOG.info(String.format("Published JobModel: %s with version: %s at path: %s.", jobModelStr, jobModelVersion, jobModelPath));
     } catch (Exception e) {
-      LOG.error("JobModel publish failed for version=" + jobModelVersion, e);
+      LOG.error(String.format("Exception occurred on publishing JobModel: %s with version: %s", jobModel, jobModelVersion), e);
       throw new SamzaException(e);
     }
   }
@@ -497,7 +488,7 @@ public class ZkUtils {
     }
     // if exists, verify the version
     Stat stat = new Stat();
-    String version = (String) zkClient.readData(rootPath, stat);
+    String version = zkClient.readData(rootPath, stat);
     if (version == null) {
       // for backward compatibility, if no value - assume 1.0
       try {
@@ -506,7 +497,7 @@ public class ZkUtils {
         // if the write failed with ZkBadVersionException it means someone else already wrote a version, so we can ignore it.
       }
       // re-read the updated version
-      version = (String) zkClient.readData(rootPath);
+      version = zkClient.readData(rootPath);
     }
     LOG.info("Current version for zk root node: " + rootPath + " is " + version + ", expected version is " + ZK_PROTOCOL_VERSION);
     if (!version.equals(ZK_PROTOCOL_VERSION)) {

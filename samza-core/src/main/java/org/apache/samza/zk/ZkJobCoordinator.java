@@ -125,7 +125,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
         new ZkBarrierListenerImpl());
     this.debounceTimeMs = new JobConfig(config).getDebounceTimeMs();
     this.reporters = MetricsReporterLoader.getMetricsReporters(new MetricsConfig(config), processorId);
-    debounceTimer = new ScheduleAfterDebounceTime();
+    debounceTimer = new ScheduleAfterDebounceTime(processorId);
     debounceTimer.setScheduledTaskCallback(throwable -> {
       LOG.error("Received exception in debounce timer! Stopping the job coordinator", throwable);
       stop();
@@ -221,15 +221,14 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   @Override
   public void onProcessorChange(List<String> processors) {
     LOG.info("ZkJobCoordinator::onProcessorChange - list of processors changed! List size=" + processors.size());
-    debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs,
-        () -> doOnProcessorChange(processors));
+    debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () -> doOnProcessorChange(processors));
   }
 
   void doOnProcessorChange(List<String> processors) {
     // if list of processors is empty - it means we are called from 'onBecomeLeader'
     // TODO: Handle empty currentProcessorIds.
-    List<String> currentProcessorIds = getActualProcessorIds(processors);
-    Set<String> uniqueProcessorIds = new HashSet<String>(currentProcessorIds);
+    List<String> currentProcessorIds = zkUtils.getSortedActiveProcessorsIDs();
+    Set<String> uniqueProcessorIds = new HashSet<>(currentProcessorIds);
 
     if (currentProcessorIds.size() != uniqueProcessorIds.size()) {
       LOG.info("Processors: {} has duplicates. Not generating JobModel.", currentProcessorIds);
@@ -278,11 +277,11 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       LOG.info("pid=" + processorId + ": new JobModel available");
       // get the new job model from ZK
       newJobModel = zkUtils.getJobModel(version);
-//        LOG.info("pid=" + processorId + ": new JobModel available. ver=" + version + "; jm = " + newJobModel);
+        LOG.info("pid=" + processorId + ": new JobModel available. ver=" + version + "; jm = " + newJobModel);
 
       if (!newJobModel.getContainers().containsKey(processorId)) {
-//          LOG.info("New JobModel does not contain pid={}. Stopping this processor. New JobModel: {}",
-//              processorId, newJobModel);
+          LOG.info("New JobModel does not contain pid={}. Stopping this processor. New JobModel: {}",
+              processorId, newJobModel);
         stop();
       } else {
         // stop current work
@@ -380,11 +379,9 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       startTime = System.nanoTime();
 
       metrics.barrierCreation.inc();
-      debounceTimer.scheduleAfterDebounceTime(
-          barrierAction,
-          (new ZkConfig(config)).getZkBarrierTimeoutMs(),
-          () -> barrier.expire(version)
-      );
+      if (zkController.isLeader()) {
+        debounceTimer.scheduleAfterDebounceTime(barrierAction, (new ZkConfig(config)).getZkBarrierTimeoutMs(), () -> barrier.expire(version));
+      }
     }
 
     public void onBarrierStateChanged(final String version, ZkBarrierForVersionUpgrade.State state) {
@@ -439,6 +436,18 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
 
           // reset all the values that might have been from the previous session (e.g ephemeral node path)
           zkUtils.unregister();
+          // We know here that we are going to rejoin the group as follower in case of successful reconnect to different
+          // server in the ensemble.
+          // In case of any error on zkClient.disconnect after this event, zkClient will trigger handleSessionEstablishmentError.
+          LOG.info("Stopping scheduler in session expiration for processorId: {}.", processorId);
+          debounceTimer.stopScheduler();
+          LOG.info("Instantiating the debounceTimer in session expired handler");
+          debounceTimer = new ScheduleAfterDebounceTime(processorId);
+          debounceTimer.setScheduledTaskCallback(throwable -> {
+            LOG.error("Received exception in debounce timer! Stopping the job coordinator", throwable);
+            stop();
+          });
+
           return;
         case Disconnected:
           // if the session has expired it means that all the registration's ephemeral nodes are gone.
@@ -470,6 +479,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       LOG.info("Got new session created event for processor=" + processorId);
 
       LOG.info("register zk controller for the new session");
+      debounceTimer.cancelAction(ZK_SESSION_ERROR);
       zkController.register();
     }
 
