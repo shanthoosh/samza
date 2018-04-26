@@ -43,11 +43,6 @@ public class TestZkStreamProcessorSession extends TestZkStreamProcessorBase {
   }
 
   @Test
-  public void testTwoStreamProcessors() {
-    testStreamProcessorWithSessionRestart(new String[]{"2", "3"});
-  }
-
-  @Test
   public void testFiveStreamProcessors() {
     testStreamProcessorWithSessionRestart(new String[]{"4", "5", "6", "7", "8"});
   }

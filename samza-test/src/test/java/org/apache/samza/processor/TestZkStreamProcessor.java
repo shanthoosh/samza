@@ -41,11 +41,6 @@ public class TestZkStreamProcessor extends TestZkStreamProcessorBase {
   }
 
   @Test
-  public void testTwoStreamProcessors() {
-    testStreamProcessor(new String[]{"2", "3"});
-  }
-
-  @Test
   public void testFiveStreamProcessors() {
     testStreamProcessor(new String[]{"4", "5", "6", "7", "8"});
   }

@@ -27,14 +27,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.I0Itec.zkclient.IZkStateListener;
-import org.I0Itec.zkclient.ZkClient;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.samza.checkpoint.CheckpointManager;
 import org.apache.samza.config.ApplicationConfig;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.ConfigException;
 import org.apache.samza.config.JobConfig;
-import org.apache.samza.config.MapConfig;
 import org.apache.samza.config.MetricsConfig;
 import org.apache.samza.config.TaskConfigJava;
 import org.apache.samza.config.ZkConfig;
@@ -42,7 +40,6 @@ import org.apache.samza.container.TaskName;
 import org.apache.samza.coordinator.JobCoordinator;
 import org.apache.samza.coordinator.JobCoordinatorListener;
 import org.apache.samza.coordinator.JobModelManager;
-import org.apache.samza.coordinator.LeaderElector;
 import org.apache.samza.coordinator.LeaderElectorListener;
 import org.apache.samza.job.model.ContainerModel;
 import org.apache.samza.job.model.JobModel;
@@ -221,7 +218,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   //////////////////////////////////////////////// LEADER stuff ///////////////////////////
   @Override
   public void onProcessorChange(List<String> processors) {
-    if (zkController.isLeader()) {
+    if (leaderElector.amILeader()) {
       LOG.info("ZkJobCoordinator::onProcessorChange - list of processors changed! List size=" + processors.size());
       debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () -> doOnProcessorChange(processors));
     }
@@ -275,16 +272,15 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
 
   @Override
   public void onNewJobModelAvailable(final String version) {
-    debounceTimer.scheduleAfterDebounceTime(JOB_MODEL_VERSION_CHANGE, 0, () ->
-    {
+    debounceTimer.scheduleAfterDebounceTime(JOB_MODEL_VERSION_CHANGE, 0, () -> {
       LOG.info("pid=" + processorId + ": new JobModel available");
       // get the new job model from ZK
       newJobModel = zkUtils.getJobModel(version);
-        LOG.info("pid=" + processorId + ": new JobModel available. ver=" + version + "; jm = " + newJobModel);
+      LOG.info("pid=" + processorId + ": new JobModel available. ver=" + version + "; jm = " + newJobModel);
 
       if (!newJobModel.getContainers().containsKey(processorId)) {
-          LOG.info("New JobModel does not contain pid={}. Stopping this processor. New JobModel: {}",
-              processorId, newJobModel);
+        LOG.info("New JobModel does not contain pid={}. Stopping this processor. New JobModel: {}", processorId,
+            newJobModel);
         stop();
       } else {
         // stop current work
@@ -382,7 +378,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       startTime = System.nanoTime();
 
       metrics.barrierCreation.inc();
-      if (zkController.isLeader()) {
+      if (leaderElector.amILeader()) {
         debounceTimer.scheduleAfterDebounceTime(barrierAction, (new ZkConfig(config)).getZkBarrierTimeoutMs(), () -> barrier.expire(version));
       }
     }
@@ -398,7 +394,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
           // no-op for non-leaders
           // for leader: make sure we do not stop - so generate a new job model
           LOG.warn("Barrier for version " + version + " timed out.");
-          if (zkController.isLeader()) {
+          if (leaderElector.amILeader()) {
             LOG.info("Leader will schedule a new job model generation");
             debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () ->
             {

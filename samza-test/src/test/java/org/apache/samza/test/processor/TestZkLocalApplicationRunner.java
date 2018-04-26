@@ -157,10 +157,20 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     for (String kafkaTopic : ImmutableList.of(inputKafkaTopic, outputKafkaTopic)) {
       LOGGER.info("Creating kafka topic: {}.", kafkaTopic);
       TestUtils.createTopic(zkUtils(), kafkaTopic, 5, 1, servers(), new Properties());
+      if (AdminUtils.topicExists(zkUtils(), kafkaTopic)) {
+        LOGGER.info("Topic: {} was created", kafkaTopic);
+      } else {
+        Assert.fail(String.format("Unable to create kafka topic: %s.", kafkaTopic));
+      }
     }
     for (String kafkaTopic : ImmutableList.of(inputSinglePartitionKafkaTopic, outputSinglePartitionKafkaTopic)) {
       LOGGER.info("Creating kafka topic: {}.", kafkaTopic);
       TestUtils.createTopic(zkUtils(), kafkaTopic, 1, 1, servers(), new Properties());
+      if (AdminUtils.topicExists(zkUtils(), kafkaTopic)) {
+        LOGGER.info("Topic: {} was created", kafkaTopic);
+      } else {
+        Assert.fail(String.format("Unable to create kafka topic: %s.", kafkaTopic));
+      }
     }
   }
 
@@ -211,6 +221,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
         .put(JobConfig.JOB_DEBOUNCE_TIME_MS(), JOB_DEBOUNCE_TIME_MS)
         .build();
     Map<String, String> applicationConfig = Maps.newHashMap(samzaContainerConfig);
+
     applicationConfig.putAll(StandaloneTestUtils.getKafkaSystemConfigs(systemName, bootstrapServers(), zkConnect(), null, StandaloneTestUtils.SerdeAlias.STRING, true));
     return applicationConfig;
   }
