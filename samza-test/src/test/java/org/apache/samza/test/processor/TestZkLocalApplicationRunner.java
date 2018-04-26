@@ -114,7 +114,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
   @Rule
   public final ExpectedException expectedException = ExpectedException.none();
 
-  @Before
+  @Override
   public void setUp() {
     super.setUp();
 
@@ -172,20 +172,6 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
         Assert.fail(String.format("Unable to create kafka topic: %s.", kafkaTopic));
       }
     }
-  }
-
-  @After
-  public void tearDown() {
-    for (String kafkaTopic : ImmutableList.of(inputKafkaTopic, outputKafkaTopic)) {
-      LOGGER.info("Deleting kafka topic: {}.", kafkaTopic);
-      AdminUtils.deleteTopic(zkUtils(), kafkaTopic);
-    }
-    for (String kafkaTopic : ImmutableList.of(inputSinglePartitionKafkaTopic, outputSinglePartitionKafkaTopic)) {
-      LOGGER.info("Deleting kafka topic: {}.", kafkaTopic);
-      AdminUtils.deleteTopic(zkUtils(), kafkaTopic);
-    }
-    zkUtils.close();
-    super.tearDown();
   }
 
   private void publishKafkaEvents(String topic, int startIndex, int endIndex, String streamProcessorId) {

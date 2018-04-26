@@ -59,7 +59,6 @@ import org.slf4j.LoggerFactory;
 
 import static org.apache.zookeeper.Watcher.Event.KeeperState.*;
 
-
 /**
  * JobCoordinator for stand alone processor managed via Zookeeper.
  */
