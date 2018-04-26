@@ -94,6 +94,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   private final ZkBarrierForVersionUpgrade barrier;
   private final ZkJobCoordinatorMetrics metrics;
   private final Map<String, MetricsReporter> reporters;
+  private final ZkLeaderElector leaderElector;
 
   private StreamMetadataCache streamMetadataCache = null;
   private SystemAdmins systemAdmins = null;
@@ -116,7 +117,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     // setup a listener for a session state change
     // we are mostly interested in "session closed" and "new session created" events
     zkUtils.getZkClient().subscribeStateChanges(new ZkSessionStateChangedListener());
-    LeaderElector leaderElector = new ZkLeaderElector(processorId, zkUtils);
+    leaderElector = new ZkLeaderElector(processorId, zkUtils);
     leaderElector.setLeaderElectorListener(new LeaderElectorListenerImpl());
     this.zkController = new ZkControllerImpl(processorId, zkUtils, this, leaderElector);
     this.barrier =  new ZkBarrierForVersionUpgrade(
@@ -220,8 +221,10 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   //////////////////////////////////////////////// LEADER stuff ///////////////////////////
   @Override
   public void onProcessorChange(List<String> processors) {
-    LOG.info("ZkJobCoordinator::onProcessorChange - list of processors changed! List size=" + processors.size());
-    debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () -> doOnProcessorChange(processors));
+    if (zkController.isLeader()) {
+      LOG.info("ZkJobCoordinator::onProcessorChange - list of processors changed! List size=" + processors.size());
+      debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () -> doOnProcessorChange(processors));
+    }
   }
 
   void doOnProcessorChange(List<String> processors) {
@@ -436,9 +439,16 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
 
           // reset all the values that might have been from the previous session (e.g ephemeral node path)
           zkUtils.unregister();
-          // We know here that we are going to rejoin the group as follower in case of successful reconnect to different
-          // server in the ensemble.
-          // In case of any error on zkClient.disconnect after this event, zkClient will trigger handleSessionEstablishmentError.
+          if (leaderElector.amILeader()) {
+            leaderElector.resignLeadership();
+          }
+          /**
+           * After this event one of the two is going to happen:
+           * A. On successful reconnect to another zookeeper server in ensemble, we are going to join the group again.
+           * In this case, retaining stale buffered events will not make sense since we're joining the group as new processor.
+           * B. If we're unable to connect to any zookeeper server, handleSessionEstablishmentError will be invoked.
+           * In this scenario as well, retaining buffered stale events will be unnecessary.
+           */
           LOG.info("Stopping scheduler in session expiration for processorId: {}.", processorId);
           debounceTimer.stopScheduler();
           LOG.info("Instantiating the debounceTimer in session expired handler");
