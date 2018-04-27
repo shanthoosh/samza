@@ -106,6 +106,15 @@ public class TestZkStreamProcessorSession extends TestZkStreamProcessorBase {
       waitForProcessorToStartStop(containerStopLatches[i]);
     }
 
+    /**
+     * How do we know here that the all stream processors have resumed to normal mode of operations.
+     * In the total time of ATTEMPTS * 10 milliseconds,
+     * We would like the stream processors to complete the rebalancing phase, go through the startup sequence and
+     * also to complete processing of all the messages.
+     * There're flaky test failures here when all the processors doesn't complete all of the above phases  within
+     * defined timeout.
+     **/
+
     // read again the first batch
     waitUntilMessagesLeftN(totalEventsToGenerate - 2 * messageCount);
 
