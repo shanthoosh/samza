@@ -127,11 +127,12 @@ public class ScheduleAfterDebounceTime {
   }
 
   public synchronized void cancelAllScheduledActions(String processorId) {
+    boolean isSchedulerShutdown = isShuttingDown;
     stopScheduler();
     ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat(String.format(DEBOUNCE_THREAD_NAME_FORMAT, processorId))
                                                             .setDaemon(true).build();
     this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(threadFactory);
-    isShuttingDown = false;
+    isShuttingDown = isSchedulerShutdown;
   }
 
   /**
