@@ -50,7 +50,7 @@ public class ScheduleAfterDebounceTime {
   private Optional<ScheduledTaskCallback> scheduledTaskCallback;
 
   // Responsible for scheduling delayed actions.
-  private final ScheduledExecutorService scheduledExecutorService;
+  private ScheduledExecutorService scheduledExecutorService;
 
   /**
    * A map from actionName to {@link ScheduledFuture} of task scheduled for execution.
@@ -124,6 +124,14 @@ public class ScheduleAfterDebounceTime {
     // should clear out the future handles as well
     futureHandles.keySet()
         .forEach(this::tryCancelScheduledAction);
+  }
+
+  public synchronized void cancelAllScheduledActions(String processorId) {
+    stopScheduler();
+    ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat(String.format(DEBOUNCE_THREAD_NAME_FORMAT, processorId))
+                                                            .setDaemon(true).build();
+    this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(threadFactory);
+    isShuttingDown = false;
   }
 
   /**
