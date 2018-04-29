@@ -444,14 +444,8 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
            * B. If we're unable to connect to any zookeeper server, handleSessionEstablishmentError will be invoked.
            * In this scenario as well, retaining buffered stale events will be unnecessary.
            */
-          LOG.info("Stopping scheduler in session expiration for processorId: {}.", processorId);
-          debounceTimer.stopScheduler();
-          LOG.info("Instantiating the debounceTimer in session expired handler");
-          debounceTimer = new ScheduleAfterDebounceTime(processorId);
-          debounceTimer.setScheduledTaskCallback(throwable -> {
-            LOG.error("Received exception in debounce timer! Stopping the job coordinator", throwable);
-            stop();
-          });
+          LOG.info("Cancelling all scheduled actions in session expiration for processorId: {}.", processorId);
+          debounceTimer.cancelAllScheduledActions(processorId);
 
           return;
         case Disconnected:
