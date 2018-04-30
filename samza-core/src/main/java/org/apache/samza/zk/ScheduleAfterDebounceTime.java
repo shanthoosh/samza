@@ -50,7 +50,7 @@ public class ScheduleAfterDebounceTime {
   private Optional<ScheduledTaskCallback> scheduledTaskCallback;
 
   // Responsible for scheduling delayed actions.
-  private final ScheduledExecutorService scheduledExecutorService;
+  private ScheduledExecutorService scheduledExecutorService;
 
   /**
    * A map from actionName to {@link ScheduledFuture} of task scheduled for execution.
@@ -89,6 +89,10 @@ public class ScheduleAfterDebounceTime {
     futureHandles.put(actionName, scheduledFuture);
   }
 
+  public synchronized void cancelAction(String action) {
+    this.tryCancelScheduledAction(action);
+  }
+
   /**
    * Stops the scheduler. After this invocation no further schedule calls will be accepted
    * and all pending enqueued tasks will be cancelled.
@@ -110,8 +114,12 @@ public class ScheduleAfterDebounceTime {
         .forEach(this::tryCancelScheduledAction);
   }
 
-  public synchronized void cancelAction(String action) {
-    this.tryCancelScheduledAction(action);
+  public synchronized void cancelAllScheduledActions() {
+    if (!isShuttingDown) {
+      stopScheduler();
+      ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat(String.format(DEBOUNCE_THREAD_NAME_FORMAT)).setDaemon(true).build();
+      this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(threadFactory);
+    }
   }
 
   /**
@@ -120,6 +128,7 @@ public class ScheduleAfterDebounceTime {
    * @param actionName the name of action to cancel.
    */
   private void tryCancelScheduledAction(String actionName) {
+    LOG.info("Trying to cancel the action: {}.", actionName);
     ScheduledFuture scheduledFuture = futureHandles.get(actionName);
     if (scheduledFuture != null && !scheduledFuture.isDone()) {
       LOG.info("Attempting to cancel the future of action: {}", actionName);

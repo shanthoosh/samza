@@ -33,7 +33,6 @@ import org.apache.samza.config.ApplicationConfig;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.ConfigException;
 import org.apache.samza.config.JobConfig;
-import org.apache.samza.config.MapConfig;
 import org.apache.samza.config.MetricsConfig;
 import org.apache.samza.config.TaskConfigJava;
 import org.apache.samza.config.ZkConfig;
@@ -41,7 +40,6 @@ import org.apache.samza.container.TaskName;
 import org.apache.samza.coordinator.JobCoordinator;
 import org.apache.samza.coordinator.JobCoordinatorListener;
 import org.apache.samza.coordinator.JobModelManager;
-import org.apache.samza.coordinator.LeaderElector;
 import org.apache.samza.coordinator.LeaderElectorListener;
 import org.apache.samza.job.model.ContainerModel;
 import org.apache.samza.job.model.JobModel;
@@ -92,6 +90,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   private final ZkBarrierForVersionUpgrade barrier;
   private final ZkJobCoordinatorMetrics metrics;
   private final Map<String, MetricsReporter> reporters;
+  private final ZkLeaderElector leaderElector;
 
   private StreamMetadataCache streamMetadataCache = null;
   private SystemAdmins systemAdmins = null;
@@ -114,7 +113,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     // setup a listener for a session state change
     // we are mostly interested in "session closed" and "new session created" events
     zkUtils.getZkClient().subscribeStateChanges(new ZkSessionStateChangedListener());
-    LeaderElector leaderElector = new ZkLeaderElector(processorId, zkUtils);
+    leaderElector = new ZkLeaderElector(processorId, zkUtils);
     leaderElector.setLeaderElectorListener(new LeaderElectorListenerImpl());
     this.zkController = new ZkControllerImpl(processorId, zkUtils, this, leaderElector);
     this.barrier =  new ZkBarrierForVersionUpgrade(
@@ -218,16 +217,17 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   //////////////////////////////////////////////// LEADER stuff ///////////////////////////
   @Override
   public void onProcessorChange(List<String> processors) {
-    LOG.info("ZkJobCoordinator::onProcessorChange - list of processors changed! List size=" + processors.size());
-    debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs,
-        () -> doOnProcessorChange(processors));
+    if (leaderElector.amILeader()) {
+      LOG.info("ZkJobCoordinator::onProcessorChange - list of processors changed! List size=" + processors.size());
+      debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () -> doOnProcessorChange(processors));
+    }
   }
 
   void doOnProcessorChange(List<String> processors) {
     // if list of processors is empty - it means we are called from 'onBecomeLeader'
     // TODO: Handle empty currentProcessorIds.
-    List<String> currentProcessorIds = getActualProcessorIds(processors);
-    Set<String> uniqueProcessorIds = new HashSet<String>(currentProcessorIds);
+    List<String> currentProcessorIds = zkUtils.getSortedActiveProcessorsIDs();
+    Set<String> uniqueProcessorIds = new HashSet<>(currentProcessorIds);
 
     if (currentProcessorIds.size() != uniqueProcessorIds.size()) {
       LOG.info("Processors: {} has duplicates. Not generating JobModel.", currentProcessorIds);
@@ -350,8 +350,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
      * to host mapping) is passed in as null when building the jobModel.
      */
     JobModel model = JobModelManager.readJobModel(this.config, changeLogPartitionMap, null, streamMetadataCache, processors);
-    // Nuke the configuration in JobModel.
-    return new JobModel(new MapConfig(), model.getContainers());
+    return model;
   }
 
   class LeaderElectorListenerImpl implements LeaderElectorListener {
@@ -379,11 +378,9 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       startTime = System.nanoTime();
 
       metrics.barrierCreation.inc();
-      debounceTimer.scheduleAfterDebounceTime(
-          barrierAction,
-        (new ZkConfig(config)).getZkBarrierTimeoutMs(),
-        () -> barrier.expire(version)
-      );
+      if (leaderElector.amILeader()) {
+        debounceTimer.scheduleAfterDebounceTime(barrierAction, (new ZkConfig(config)).getZkBarrierTimeoutMs(), () -> barrier.expire(version));
+      }
     }
 
     public void onBarrierStateChanged(final String version, ZkBarrierForVersionUpgrade.State state) {
@@ -397,7 +394,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
           // no-op for non-leaders
           // for leader: make sure we do not stop - so generate a new job model
           LOG.warn("Barrier for version " + version + " timed out.");
-          if (zkController.isLeader()) {
+          if (leaderElector.amILeader()) {
             LOG.info("Leader will schedule a new job model generation");
             debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () ->
               {
@@ -423,8 +420,7 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     private static final String ZK_SESSION_ERROR = "ZK_SESSION_ERROR";
 
     @Override
-    public void handleStateChanged(Watcher.Event.KeeperState state)
-        throws Exception {
+    public void handleStateChanged(Watcher.Event.KeeperState state) {
       switch (state) {
         case Expired:
           // if the session has expired it means that all the registration's ephemeral nodes are gone.
@@ -433,12 +429,26 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
           // increase generation of the ZK session. All the callbacks from the previous generation will be ignored.
           zkUtils.incGeneration();
 
-          if (coordinatorListener != null) {
-            coordinatorListener.onJobModelExpired();
-          }
-
           // reset all the values that might have been from the previous session (e.g ephemeral node path)
           zkUtils.unregister();
+          if (leaderElector.amILeader()) {
+            leaderElector.resignLeadership();
+          }
+          /**
+           * After this event one of the two is going to happen:
+           * A. On successful reconnect to another zookeeper server in ensemble, we are going to join the group again.
+           * In this case, retaining stale buffered events will not make sense since we're joining the group as new processor.
+           * B. If we're unable to connect to any zookeeper server, handleSessionEstablishmentError will be invoked.
+           * In this scenario as well, retaining buffered stale events will be unnecessary.
+           */
+          LOG.info("Cancelling all scheduled actions in session expiration for processorId: {}.", processorId);
+          debounceTimer.cancelAllScheduledActions();
+          debounceTimer.scheduleAfterDebounceTime(ZK_SESSION_ERROR, 0, () -> {
+            if (coordinatorListener != null) {
+              coordinatorListener.onJobModelExpired();
+            }
+          });
+
           return;
         case Disconnected:
           // if the session has expired it means that all the registration's ephemeral nodes are gone.
@@ -460,21 +470,21 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
         default:
           // received SyncConnected, ConnectedReadOnly, and SaslAuthenticated. NoOp
           LOG.info("Got ZK event " + state.toString() + " for processor=" + processorId + ". Continue");
+          return;
       }
     }
 
     @Override
-    public void handleNewSession()
-        throws Exception {
+    public void handleNewSession() {
       LOG.info("Got new session created event for processor=" + processorId);
 
       LOG.info("register zk controller for the new session");
+      debounceTimer.cancelAction(ZK_SESSION_ERROR);
       zkController.register();
     }
 
     @Override
-    public void handleSessionEstablishmentError(Throwable error)
-        throws Exception {
+    public void handleSessionEstablishmentError(Throwable error) {
       // this means we cannot connect to zookeeper to establish a session
       LOG.info("handleSessionEstablishmentError received for processor=" + processorId, error);
       debounceTimer.scheduleAfterDebounceTime(ZK_SESSION_ERROR, 0, () -> stop());
