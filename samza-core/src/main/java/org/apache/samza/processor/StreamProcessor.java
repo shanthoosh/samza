@@ -211,7 +211,7 @@ public class StreamProcessor {
       @Override
       public void onJobModelExpired() {
         SamzaContainer container = containerRef.get();
-        if (containerRef.compareAndSet(container, null)) {
+        if (container != null && containerRef.compareAndSet(container, null)) {
           SamzaContainerStatus status = container.getStatus();
           String containerId = container.toString();
           if (SamzaContainerStatus.NOT_STARTED.equals(status) || SamzaContainerStatus.STARTED.equals(status)) {
