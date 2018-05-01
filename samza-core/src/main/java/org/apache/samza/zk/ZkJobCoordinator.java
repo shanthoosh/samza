@@ -124,9 +124,9 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     this.reporters = MetricsReporterLoader.getMetricsReporters(new MetricsConfig(config), processorId);
     debounceTimer = new ScheduleAfterDebounceTime(processorId);
     debounceTimer.setScheduledTaskCallback(throwable -> {
-      LOG.error("Received exception in debounce timer! Stopping the job coordinator", throwable);
-      stop();
-    });
+        LOG.error("Received exception in debounce timer! Stopping the job coordinator", throwable);
+        stop();
+      });
     systemAdmins = new SystemAdmins(config);
     streamMetadataCache = new StreamMetadataCache(systemAdmins, METADATA_CACHE_TTL_MS, SystemClock.instance());
   }
@@ -272,24 +272,24 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
   @Override
   public void onNewJobModelAvailable(final String version) {
     debounceTimer.scheduleAfterDebounceTime(JOB_MODEL_VERSION_CHANGE, 0, () -> {
-      LOG.info("pid=" + processorId + ": new JobModel available");
-      // get the new job model from ZK
-      newJobModel = zkUtils.getJobModel(version);
-      LOG.info("pid=" + processorId + ": new JobModel available. ver=" + version + "; jm = " + newJobModel);
+        LOG.info("pid=" + processorId + ": new JobModel available");
+        // get the new job model from ZK
+        newJobModel = zkUtils.getJobModel(version);
+        LOG.info("pid=" + processorId + ": new JobModel available. ver=" + version + "; jm = " + newJobModel);
 
-      if (!newJobModel.getContainers().containsKey(processorId)) {
-        LOG.info("New JobModel does not contain pid={}. Stopping this processor. New JobModel: {}", processorId,
-            newJobModel);
-        stop();
-      } else {
-        // stop current work
-        if (coordinatorListener != null) {
-          coordinatorListener.onJobModelExpired();
+        if (!newJobModel.getContainers().containsKey(processorId)) {
+          LOG.info("New JobModel does not contain pid={}. Stopping this processor. New JobModel: {}", processorId,
+              newJobModel);
+          stop();
+        } else {
+          // stop current work
+          if (coordinatorListener != null) {
+            coordinatorListener.onJobModelExpired();
+          }
+          // update ZK and wait for all the processors to get this new version
+          barrier.join(version, processorId);
         }
-        // update ZK and wait for all the processors to get this new version
-        barrier.join(version, processorId);
-      }
-    });
+      });
   }
 
   @Override
@@ -359,10 +359,10 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
       metrics.isLeader.set(true);
       zkController.subscribeToProcessorChange();
       debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () ->
-      {
-        // actual actions to do are the same as onProcessorChange
-        doOnProcessorChange(new ArrayList<>());
-      });
+        {
+          // actual actions to do are the same as onProcessorChange
+          doOnProcessorChange(new ArrayList<>());
+        });
     }
   }
 
@@ -396,10 +396,10 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
           if (leaderElector.amILeader()) {
             LOG.info("Leader will schedule a new job model generation");
             debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, debounceTimeMs, () ->
-            {
-              // actual actions to do are the same as onProcessorChange
-              doOnProcessorChange(new ArrayList<>());
-            });
+              {
+                // actual actions to do are the same as onProcessorChange
+                doOnProcessorChange(new ArrayList<>());
+              });
           }
         }
       }
@@ -443,12 +443,11 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
           LOG.info("Cancelling all scheduled actions in session expiration for processorId: {}.", processorId);
           debounceTimer.cancelAllScheduledActions(processorId);
 
-          debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, 0, () ->
-          {
-            if (coordinatorListener != null) {
-              coordinatorListener.onJobModelExpired();
-            }
-          );
+          debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, 0, () -> {
+              if (coordinatorListener != null) {
+                coordinatorListener.onJobModelExpired();
+              }
+            });
           return;
         case Disconnected:
           // if the session has expired it means that all the registration's ephemeral nodes are gone.
