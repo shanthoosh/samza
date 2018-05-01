@@ -428,10 +428,6 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
           // increase generation of the ZK session. All the callbacks from the previous generation will be ignored.
           zkUtils.incGeneration();
 
-          if (coordinatorListener != null) {
-            coordinatorListener.onJobModelExpired();
-          }
-
           // reset all the values that might have been from the previous session (e.g ephemeral node path)
           zkUtils.unregister();
           if (leaderElector.amILeader()) {
@@ -447,6 +443,12 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
           LOG.info("Cancelling all scheduled actions in session expiration for processorId: {}.", processorId);
           debounceTimer.cancelAllScheduledActions(processorId);
 
+          debounceTimer.scheduleAfterDebounceTime(ON_PROCESSOR_CHANGE, 0, () ->
+          {
+            if (coordinatorListener != null) {
+              coordinatorListener.onJobModelExpired();
+            }
+          );
           return;
         case Disconnected:
           // if the session has expired it means that all the registration's ephemeral nodes are gone.
