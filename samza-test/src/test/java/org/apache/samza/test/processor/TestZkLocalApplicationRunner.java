@@ -56,6 +56,7 @@ import org.apache.samza.test.StandaloneTestUtils;
 import org.apache.samza.test.processor.TestStreamApplication.StreamApplicationCallback;
 import org.apache.samza.test.processor.TestStreamApplication.TestKafkaEvent;
 import org.apache.samza.util.NoOpMetricsRegistry;
+import org.apache.samza.zk.ZkCoordinationUtilsFactory;
 import org.apache.samza.zk.ZkJobCoordinatorFactory;
 import org.apache.samza.zk.ZkKeyBuilder;
 import org.apache.samza.zk.ZkUtils;
@@ -132,7 +133,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     configMap.put(JobConfig.PROCESSOR_ID(), PROCESSOR_IDS[2]);
     applicationConfig3 = new ApplicationConfig(new MapConfig(configMap));
 
-    ZkClient zkClient = new ZkClient(zkConnect());
+    ZkClient zkClient = new ZkClient(zkConnect(), ZK_CONNECTION_TIMEOUT_MS, ZK_CONNECTION_TIMEOUT_MS, new ZkCoordinationUtilsFactory.ZkStringSerializer());
     ZkKeyBuilder zkKeyBuilder = new ZkKeyBuilder(ZkJobCoordinatorFactory.getJobCoordinationZkPath(applicationConfig1));
     zkUtils = new ZkUtils(zkKeyBuilder, zkClient, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS, new NoOpMetricsRegistry());
     zkUtils.connect();

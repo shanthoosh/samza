@@ -82,7 +82,9 @@ public class ZkBarrierForVersionUpgrade {
   private final ScheduleAfterDebounceTime debounceTimer;
 
   public enum State {
-    NEW("NEW"), TIMED_OUT("TIMED_OUT"), DONE("DONE");
+    NEW("NEW"),
+    TIMED_OUT("TIMED_OUT"),
+    DONE("DONE");
 
     private String str;
 
@@ -155,7 +157,7 @@ public class ZkBarrierForVersionUpgrade {
    */
   public void expire(String version) {
     String barrierStatePath = keyBuilder.getBarrierStatePath(version);
-    State barrierState = zkUtils.getZkClient().readData(barrierStatePath);
+    State barrierState = State.valueOf(zkUtils.getZkClient().readData(barrierStatePath));
     if (Objects.equals(barrierState, State.NEW)) {
       LOG.info(String.format("Expiring the barrier version: %s. Marking the barrier state: %s as %s.", version, barrierStatePath, State.TIMED_OUT));
       zkUtils.writeData(keyBuilder.getBarrierStatePath(version), State.TIMED_OUT);
@@ -232,12 +234,13 @@ public class ZkBarrierForVersionUpgrade {
       if (notAValidEvent())
         return;
 
-      State barrierState = (State) data;
+      String dataStr = (String) data;
+      State barrierState = State.valueOf(dataStr);
       List<State> expectedBarrierStates = ImmutableList.of(State.DONE, State.TIMED_OUT);
 
-      if (barrierState != null && expectedBarrierStates.contains(barrierState)) {
+      if (expectedBarrierStates.contains(barrierState)) {
         zkUtils.unsubscribeDataChanges(barrierStatePath, this);
-        barrierListenerOptional.ifPresent(zkBarrierListener -> zkBarrierListener.onBarrierStateChanged(barrierVersion, (State) data));
+        barrierListenerOptional.ifPresent(zkBarrierListener -> zkBarrierListener.onBarrierStateChanged(barrierVersion, barrierState));
       } else {
         LOG.debug("Barrier version: {} is at state: {}. Ignoring the barrierState change notification.", barrierVersion, barrierState);
       }

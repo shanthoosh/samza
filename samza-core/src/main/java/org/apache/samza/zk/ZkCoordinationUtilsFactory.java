@@ -19,8 +19,10 @@
 package org.apache.samza.zk;
 
 import com.google.common.base.Strings;
+import java.io.UnsupportedEncodingException;
 import org.I0Itec.zkclient.ZkClient;
-import org.I0Itec.zkclient.serialize.SerializableSerializer;
+import org.I0Itec.zkclient.exception.ZkMarshallingError;
+import org.I0Itec.zkclient.serialize.ZkSerializer;
 import org.apache.samza.SamzaException;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.ZkConfig;
@@ -56,7 +58,7 @@ public class ZkCoordinationUtilsFactory implements CoordinationUtilsFactory {
   public static ZkClient createZkClient(String connectString, int sessionTimeoutMS, int connectionTimeoutMs) {
     ZkClient zkClient;
     try {
-      zkClient = new ZkClient(connectString, sessionTimeoutMS, connectionTimeoutMs, new SerializableSerializer(), connectionTimeoutMs);
+      zkClient = new ZkClient(connectString, sessionTimeoutMS, connectionTimeoutMs, new ZkStringSerializer(), connectionTimeoutMs);
     } catch (Exception e) {
       // ZkClient constructor may throw a variety of different exceptions, not all of them Zk based.
       throw new SamzaException("zkClient failed to connect to ZK at :" + connectString, e);
@@ -86,6 +88,30 @@ public class ZkCoordinationUtilsFactory implements CoordinationUtilsFactory {
     // if namespace specified (path above) but "/" does not exists, we will fail
     if (!zkClient.exists("/")) {
       throw new SamzaException("Zookeeper namespace: " + path + " does not exist for zk at " + zkConnect);
+    }
+  }
+
+  public static class ZkStringSerializer implements ZkSerializer {
+
+    private static final String UTF_8 = "UTF-8";
+
+    @Override
+    public byte[] serialize(Object data) throws ZkMarshallingError {
+      String dataAsStr = data.toString();
+      try {
+        return dataAsStr.getBytes(UTF_8);
+      } catch (UnsupportedEncodingException e) {
+        throw new ZkMarshallingError(e);
+      }
+    }
+
+    @Override
+    public Object deserialize(byte[] bytes) throws ZkMarshallingError {
+      try {
+        return new String(bytes, UTF_8);
+      } catch (UnsupportedEncodingException e) {
+        throw new ZkMarshallingError(e);
+      }
     }
   }
 }
