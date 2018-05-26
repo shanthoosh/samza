@@ -276,18 +276,13 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
         newJobModel = zkUtils.getJobModel(version);
         LOG.info("pid=" + processorId + ": new JobModel available. ver=" + version + "; jm = " + newJobModel);
 
-        if (!newJobModel.getContainers().containsKey(processorId)) {
-          LOG.info("New JobModel does not contain pid={}. Stopping this processor. New JobModel: {}",
-              processorId, newJobModel);
-          stop();
-        } else {
-          // stop current work
-          if (coordinatorListener != null) {
-            coordinatorListener.onJobModelExpired();
-          }
-          // update ZK and wait for all the processors to get this new version
-          barrier.join(version, processorId);
+        // stop current work
+        if (coordinatorListener != null) {
+          coordinatorListener.onJobModelExpired();
         }
+
+        // update ZK and wait for all the processors to get this new version
+        barrier.join(version, processorId);
       });
   }
 
@@ -298,8 +293,10 @@ public class ZkJobCoordinator implements JobCoordinator, ZkControllerListener {
     JobModel jobModel = getJobModel();
 
     // start the container with the new model
-    if (coordinatorListener != null) {
-      coordinatorListener.onNewJobModel(processorId, jobModel);
+    if (newJobModel.getContainers().containsKey(processorId)) {
+      if (coordinatorListener != null) {
+        coordinatorListener.onNewJobModel(processorId, jobModel);
+      }
     }
   }
 
