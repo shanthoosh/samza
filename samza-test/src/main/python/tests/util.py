@@ -25,32 +25,31 @@ from zopkio.runtime import get_active_config as c
 
 logger = logging.getLogger(__name__)
 
-DEPLOYER = 'samza_job_deployer'
 
-def start_job(package_id, job_id, config_file):
+def start_job(package_id, job_id, config_file, deployer):
   """
   Start a Samza job.
   """
   logger.info('Starting {0}.{1}'.format(package_id, job_id))
-  samza_job_deployer = runtime.get_deployer(DEPLOYER)
+  samza_job_deployer = runtime.get_deployer(deployer)
   samza_job_deployer.start(job_id, {
     'package_id': package_id,
     'config_file': config_file,
   })
 
-def await_job(package_id, job_id):
+def await_job(package_id, job_id, deployer):
   """
   Wait for a Samza job to finish.
   """
   logger.info('Awaiting {0}.{1}'.format(package_id, job_id))
-  samza_job_deployer = runtime.get_deployer(DEPLOYER)
+  samza_job_deployer = runtime.get_deployer(deployer)
   samza_job_deployer.await(job_id, {
     'package_id': package_id,
   })
 
 def get_kafka_client(num_retries=20, retry_sleep=1):
   """
-  Returns a KafkaClient based off of the kafka_hosts and kafka_port configs set 
+  Returns a KafkaClient based off of the kafka_hosts and kafka_port configs set
   in the active runtime.
   """
   kafka_hosts = runtime.get_active_config('kafka_hosts').values()

@@ -32,16 +32,16 @@ NUM_MESSAGES = 50
 
 def test_samza_job():
   """
-  Runs a job that reads converts input strings to integers, negates the 
+  Runs a job that reads converts input strings to integers, negates the
   integer, and outputs to a Kafka topic.
   """
   _load_data()
-  util.start_job(PACKAGE_ID, JOB_ID, CONFIG_FILE)
-  util.await_job(PACKAGE_ID, JOB_ID)
+  util.start_job(PACKAGE_ID, JOB_ID, CONFIG_FILE, DEPLOYER)
+  util.await_job(PACKAGE_ID, JOB_ID, DEPLOYER)
 
 def validate_samza_job():
   """
-  Validates that negate-number negated all messages, and sent the output to 
+  Validates that negate-number negated all messages, and sent the output to
   samza-test-topic-output.
   """
   logger.info('Running validate_samza_job')

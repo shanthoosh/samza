@@ -1,0 +1,11 @@
+{
+  "standalone-processor-2_hosts": {
+    "standalone-processor-2_instance_0": "localhost"
+  },
+  "standalone-processor-2_start_cmd": "cd samza-standalone_failure_testing ; ./gradlew clean build -x test ;   ./samza-shell/src/main/bash/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain --config-path ./samza-test/src/main/config/standalone.failure.test-processor-2.properties --operation run  ; ; cd ..",
+  "standalone-processor-2_stop_cmd": "",
+  "standalone-processor-2_install_path": "deploy/standalone-processor-2",
+  "standalone-processor-2_executable": "https://github.com/shanthoosh/samza/archive/standalone_failure_testing.zip",
+  "standalone-processor-2_post_install_cmds": [],
+  "standalone-processor-2_logs": ["deploy/standalone-processor-2.log"]
+}

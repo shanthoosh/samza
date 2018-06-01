@@ -19,6 +19,7 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BASE_DIR=$DIR/..
 TEST_DIR=$1
+ENABLE_STANDALONE_TESTS=$2
 
 if test -z "$TEST_DIR"; then
   echo
@@ -80,7 +81,7 @@ if [[ $SWITCHES != *"console-log-level"* ]]; then
 fi
 
 # run the tests
-zopkio --config-overrides remote_install_path=$ABS_TEST_DIR $SWITCHES $SCRIPTS_DIR/integration_tests.py
+zopkio --config-overrides remote_install_path=$ABS_TEST_DIR $SWITCHES $SCRIPTS_DIR/standalone_integration_tests.py
 
 # go back to execution directory
 deactivate
