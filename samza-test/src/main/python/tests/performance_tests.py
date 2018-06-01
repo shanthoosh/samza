@@ -31,15 +31,16 @@ TEST_INPUT_TOPIC = 'kafka-read-write-performance-input'
 TEST_OUTPUT_TOPIC = 'kafka-read-write-performance-output'
 NUM_MESSAGES = 1000000
 MESSAGE = 'a' * 200
+DEPLOYER = 'samza_job_deployer'
 
 def test_kafka_read_write_performance():
   """
-  Runs a Samza job that reads from Kafka, and writes back out to it. The 
+  Runs a Samza job that reads from Kafka, and writes back out to it. The
   writes/sec for the job is logged to the job's container.
   """
   _load_data()
-  util.start_job(PACKAGE_ID, KAFKA_JOB_ID, KAFKA_CONFIG_FILE)
-  util.await_job(PACKAGE_ID, KAFKA_JOB_ID)
+  util.start_job(PACKAGE_ID, KAFKA_JOB_ID, KAFKA_CONFIG_FILE, DEPLOYER)
+  util.await_job(PACKAGE_ID, KAFKA_JOB_ID, DEPLOYER)
 
 def validate_kafka_read_write_performance():
   """
@@ -49,8 +50,8 @@ def validate_kafka_read_write_performance():
   kafka = util.get_kafka_client()
   kafka.ensure_topic_exists(TEST_OUTPUT_TOPIC)
   consumer = SimpleConsumer(
-    kafka, 
-    'samza-test-group', 
+    kafka,
+    'samza-test-group',
     TEST_OUTPUT_TOPIC,
     fetch_size_bytes=1000000,
     buffer_size=32768,
@@ -63,11 +64,11 @@ def validate_kafka_read_write_performance():
 
 def test_container_performance():
   """
-  Runs TestPerformanceTask with a MockSystem to test how fast the 
+  Runs TestPerformanceTask with a MockSystem to test how fast the
   SamzaContainer can go.
   """
-  util.start_job(PACKAGE_ID, CONTAINER_JOB_ID, CONTAINER_CONFIG_FILE)
-  util.await_job(PACKAGE_ID, CONTAINER_JOB_ID)
+  util.start_job(PACKAGE_ID, CONTAINER_JOB_ID, CONTAINER_CONFIG_FILE, DEPLOYER)
+  util.await_job(PACKAGE_ID, CONTAINER_JOB_ID, DEPLOYER)
 
 def validate_container_performance():
   pass
