@@ -31,13 +31,12 @@ deployers = {}
 def _download_components(components):
     for component in components:
         url_key = 'url_{0}'.format(component)
-        logger.info('Getting download URL for: {0}'.format(url_key))
         url = c(url_key)
         filename = os.path.basename(url)
         if os.path.exists(filename):
-            logger.debug('Using cached file: {0}'.format(filename))
+            logger.debug('Using cached file: {0}.'.format(filename))
         else:
-            logger.info('Downloading: {0}'.format(url))
+            logger.info('Downloading {0} from URL: {1}.'.format(component, url_key))
             urllib.urlretrieve(url, filename)
 
 ### Install and start all the components(from param) through binaries in deployment directory.
@@ -94,7 +93,6 @@ def setup_suite():
 
 ### Zopkio specific method that will be run once after all the integration tests.
 def teardown_suite():
-    # stream_application_deployer.uninstall('tests')
 
     # Undeploy everything.
     for name, deployer in deployers.iteritems():
