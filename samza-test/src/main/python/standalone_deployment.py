@@ -81,7 +81,7 @@ def setup_suite():
 
     ### Use command line to create kafka topic since kafka python API doesn't allow to control partition count.
     command="./kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 3 --topic standaloneIntegrationTestKafkaInputTopic"
-    p = Popen(command.split(' '), stdin=PIPE, stdout=PIPE, stderr=PIPE, env=env)
+    p = Popen(command.split(' '), stdin=PIPE, stdout=PIPE, stderr=PIPE)
     output, err = p.communicate()
     logger.info("Output from run-job.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
 
