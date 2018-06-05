@@ -53,10 +53,10 @@ def _new_ssh_deployer(config_prefix, name=None):
     })
 
 def _deploy_components(deployers, components):
-    for name in components:
-        deployer = deployers[name]
-        runtime.set_deployer(name, deployer)
-        for instance, host in c(name + '_hosts').iteritems():
+    for component in components:
+        deployer = deployers[component]
+        runtime.set_deployer(component, deployer)
+        for instance, host in c(component + '_hosts').iteritems():
             logger.info('Deploying {0} on host: {1}'.format(instance, host))
             deployer.deploy(instance, {
                  'hostname': host
@@ -65,8 +65,8 @@ def _deploy_components(deployers, components):
             time.sleep(5)
 
 def _create_topic(topic_name, partition_count):
-    ### Use command line to create kafka topic since kafka python API doesn't allow to control partition count.
-    command='./kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions {0} --topic {1}'.format(partition_count, topic_name)
+    ### Employ command line to create kafka topic since existing kafka python API doesn't allow to configure partition count when creating topic.
+    command='./deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions {0} --topic {1}'.format(partition_count, topic_name)
     p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     output, err = p.communicate()
     logger.info("Output from kafka-topics.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
