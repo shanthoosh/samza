@@ -28,8 +28,9 @@ logger = logging.getLogger(__name__)
 deployers = {}
 
 ### Download all the components.
-def _download_components():
-    for url_key in ['url_kafka', 'url_zookeeper']:
+def _download_components(components):
+    for component in components:
+        url_key = 'url_{0}'.format(component)
         logger.info('Getting download URL for: {0}'.format(url_key))
         url = c(url_key)
         filename = os.path.basename(url)
@@ -83,7 +84,7 @@ def _create_kafka_topic(zookeeper_servers, topic_name, partition_count, replicat
 
 ### Zopkio specific method that will be run once before all the integration tests.
 def setup_suite():
-    _download_components()
+    _download_components(['zookeeper', 'kafka'])
 
     _deploy_components(['zookeeper', 'kafka'])
 
