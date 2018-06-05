@@ -60,6 +60,7 @@ public class LocalApplicationRunnerMain {
           }
         };
         Thread thread = new Thread(runnable);
+        thread.setDaemon(false);
         thread.start();
       } else if (op.equals(ApplicationRunnerOperation.KILL)) {
         runner.kill(app);

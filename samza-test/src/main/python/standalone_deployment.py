@@ -78,10 +78,9 @@ def setup_suite():
 
             time.sleep(5)
 
-            for process in deployer.get_processes():
-                deployer.start(process.unique_id)
+            logger.info('Starting instance: {0}', instance)
 
-            runtime.set_deployer(name, deployer)
+            deployer.start(instance)
 
 def teardown_suite():
     # stream_application_deployer.uninstall('tests')

@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 JOB_ID = 'test-app-id'
 PACKAGE_ID = 'tests'
-TEST_INPUT_TOPIC = 'testKafkaInputTopic'
-TEST_OUTPUT_TOPIC = 'testKafkaOutputTopic'
+TEST_INPUT_TOPIC = 'testKafkaInputTopic-1'
+TEST_OUTPUT_TOPIC = 'testKafkaOutputTopic-1'
 NUM_MESSAGES = 50
 
 def test_samza_job():
