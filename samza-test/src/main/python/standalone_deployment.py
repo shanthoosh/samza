@@ -66,7 +66,12 @@ def _deploy_components(deployers, components):
 
 def _create_topic(topic_name, partition_count):
     ### Employ command line to create kafka topic since existing kafka python API doesn't allow to configure partition count when creating topic.
-    command='./deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions {0} --topic {1}'.format(partition_count, topic_name)
+    base_dir = os.getcwd()
+    logger.info('Current working directory: {0}'.format(base_dir))
+
+    command='./{0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions {1} --topic {2}'.format(base_dir, partition_count, topic_name)
+    logger.info("running command")
+    logger.info(command)
     p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     output, err = p.communicate()
     logger.info("Output from kafka-topics.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
@@ -85,7 +90,6 @@ def setup_suite():
         'standalone-processor-3': _new_ssh_deployer('standalone-processor-3'),
     }
 
-    logger.info('Current working directory: {0}'.format(os.getcwd()))
 
     _download_packages()
 
