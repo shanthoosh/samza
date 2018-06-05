@@ -36,7 +36,7 @@ def _download_components(components):
         if os.path.exists(filename):
             logger.debug('Using cached file: {0}.'.format(filename))
         else:
-            logger.info('Downloading {0} from URL: {1}.'.format(component, url_key))
+            logger.info('Downloading {0} from URL: {1}.'.format(component, url))
             urllib.urlretrieve(url, filename)
 
 ### Install and start all the components(from param) through binaries in deployment directory.
