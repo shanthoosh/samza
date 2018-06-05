@@ -81,7 +81,7 @@ def _create_kafka_topic(zookeeper_servers, topic_name, partition_count, replicat
     output, err = p.communicate()
     logger.info("Output from kafka-topics.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
 
-### Zopkio specific method that will be run before all the integration test once.
+### Zopkio specific method that will be run once before all the integration tests.
 def setup_suite():
     _download_components()
 
@@ -91,7 +91,7 @@ def setup_suite():
 
     _deploy_components(['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
 
-### Zopkio specific method that will be run after all the integration test once.
+### Zopkio specific method that will be run once after all the integration tests.
 def teardown_suite():
     # stream_application_deployer.uninstall('tests')
 
