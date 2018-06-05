@@ -52,20 +52,11 @@ public class LocalApplicationRunnerMain {
 
     try {
       if (op.equals(ApplicationRunnerOperation.RUN)) {
-        Runnable runnable = () -> {
-          try {
-            runner.run(app);
-          } catch (Exception e) {
-            LOGGER.error("Exception occurred: ", e);
-          }
-        };
-        Thread thread = new Thread(runnable);
-        thread.setDaemon(false);
-        thread.start();
+        runner.run(app);
       } else if (op.equals(ApplicationRunnerOperation.KILL)) {
         runner.kill(app);
-        runner.waitForFinish();
       }
+      runner.waitForFinish();
     } catch (Exception e) {
       LOGGER.error("Exception occurred when invoking: {} on application: {}.", op, app, e);
     }
