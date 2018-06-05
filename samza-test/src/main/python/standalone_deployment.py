@@ -69,7 +69,7 @@ def _create_topic(topic_name, partition_count):
     base_dir = os.getcwd()
     logger.info('Current working directory: {0}'.format(base_dir))
 
-    command='./{0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions {1} --topic {2}'.format(base_dir, partition_count, topic_name)
+    command='sh {0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions {1} --topic {2}'.format(base_dir, partition_count, topic_name)
     logger.info("running command")
     logger.info(command)
     p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
