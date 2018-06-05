@@ -74,7 +74,7 @@ def _create_kafka_topic(zookeeper_servers, topic_name, partition_count, replicat
     base_dir = os.getcwd()
     logger.info('Current working directory: {0}'.format(base_dir))
 
-    create_topic_command = 'sh {0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper {1} --replication-factor {2} --partitions {3} --topic {4}'.format(base_dir, zookeeper_servers, replication_factor, partition_count, topic_name)
+    create_topic_command = ['sh {0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper {1} --replication-factor {2} --partitions {3} --topic {4}'.format(base_dir, zookeeper_servers, replication_factor, partition_count, topic_name)]
     logger.info("running command")
     logger.info(create_topic_command)
     p = Popen(create_topic_command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
