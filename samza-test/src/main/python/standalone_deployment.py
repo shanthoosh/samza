@@ -78,6 +78,9 @@ def setup_suite():
 
             time.sleep(5)
 
+            for process in deployer.get_processes():
+                deployer.start(process.unique_id)
+
             runtime.set_deployer(name, deployer)
 
 def teardown_suite():
