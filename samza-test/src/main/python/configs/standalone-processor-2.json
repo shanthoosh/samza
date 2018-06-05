@@ -2,7 +2,7 @@
   "standalone-processor-2_hosts": {
     "standalone-processor-2_instance_0": "localhost"
   },
-  "standalone-processor-2_start_cmd": "export SAMZA_LOG_DIR=\"deploy/standalone-processor-2\"; ./bin/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain --config-path ./config/standalone.failure.test-processor-2.properties --operation run  > /tmp/standalone-processor-2.log &",
+  "standalone-processor-2_start_cmd": "export SAMZA_LOG_DIR=\"deploy/standalone-processor-2\"; export JAVA_OPTS=\"$JAVA_OPTS -Xmx2G\"; ./bin/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain --config-path ./config/standalone.failure.test-processor-2.properties --operation run  > /tmp/standalone-processor-2.log &",
   "standalone-processor-2_stop_cmd": "./bin/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain --config-path ./config/standalone.failure.test-processor-2.properties --operation kill  &",
   "standalone-processor-2_install_path": "deploy/standalone-processor-2",
   "standalone-processor-2_executable": "samza-test_2.11-0.15.0-SNAPSHOT.tgz",

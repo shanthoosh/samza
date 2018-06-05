@@ -52,7 +52,6 @@ public class LocalApplicationRunnerMain {
 
     try {
       if (op.equals(ApplicationRunnerOperation.RUN)) {
-
         Runnable runnable = () -> {
           try {
             runner.run(app);
