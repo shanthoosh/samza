@@ -52,7 +52,16 @@ public class LocalApplicationRunnerMain {
 
     try {
       if (op.equals(ApplicationRunnerOperation.RUN)) {
-        runner.run(app);
+
+        Runnable runnable = () -> {
+          try {
+            runner.run(app);
+          } catch (Exception e) {
+            LOGGER.error("Exception occurred: ", e);
+          }
+        };
+        Thread thread = new Thread(runnable);
+        thread.start();
       } else if (op.equals(ApplicationRunnerOperation.KILL)) {
         runner.kill(app);
         runner.waitForFinish();
