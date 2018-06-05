@@ -29,7 +29,7 @@ import time
 logger = logging.getLogger(__name__)
 deployers = None
 
-def _download_packages():
+def _download_components():
     for url_key in ['url_kafka', 'url_zookeeper']:
         logger.debug('Getting download URL for: {0}'.format(url_key))
         url = c(url_key)
@@ -64,20 +64,21 @@ def _deploy_components(deployers, components):
 
             time.sleep(5)
 
-def _create_topic(topic_name, partition_count):
+## zookeeper_servers: Comma seperated list of zookeeper server of form host:port.
+## topic_name: Name of kafka topic to create.
+## partition_count: Number of partitions of kafka topic to be created.
+## replication_factor: Replication factor property of the kafka topic.
+def _create_kafka_topic(zookeeper_servers, topic_name, partition_count, replication_factor):
     ### Employ command line to create kafka topic since existing kafka python API doesn't allow to configure partition count when creating topic.
     base_dir = os.getcwd()
     logger.info('Current working directory: {0}'.format(base_dir))
 
-    command='sh {0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions {1} --topic {2}'.format(base_dir, partition_count, topic_name)
+    command='sh {0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper {1} --replication-factor {2} --partitions {3} --topic {4}'.format(base_dir, zookeeper_servers, replication_factor, partition_count, topic_name)
     logger.info("running command")
     logger.info(command)
     p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     output, err = p.communicate()
     logger.info("Output from kafka-topics.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
-
-    _deploy_components(deployers, ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
-
 
 def setup_suite():
     global deployers
@@ -90,12 +91,11 @@ def setup_suite():
         'standalone-processor-3': _new_ssh_deployer('standalone-processor-3'),
     }
 
-
-    _download_packages()
+    _download_components()
 
     _deploy_components(deployers, ['zookeeper', 'kafka'])
 
-    _create_topic('standaloneIntegrationTestKafkaInputTopic', 3)
+    _create_kafka_topic('localhost:2181','standaloneIntegrationTestKafkaInputTopic', 3, 1)
 
     _deploy_components(deployers, ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
 
