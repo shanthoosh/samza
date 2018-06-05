@@ -21,7 +21,7 @@ dir = os.path.dirname(os.path.abspath(__file__))
 
 test = {
     'deployment_code': os.path.join(dir, 'standalone_deployment.py'),
-    'perf_code': '',
+    'perf_code': os.path.join(dir, 'perf.py'),
     'configs_directory': os.path.join(dir, 'configs'),
     'test_code': [
         os.path.join(dir, 'tests', 'standalone_tests.py'),
