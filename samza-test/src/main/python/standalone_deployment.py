@@ -22,6 +22,8 @@ import urllib
 import zopkio.runtime as runtime
 import zopkio.adhoc_deployer as adhoc_deployer
 from zopkio.runtime import get_active_config as c
+from subprocess import PIPE, Popen
+
 import time
 
 logger = logging.getLogger(__name__)
@@ -67,7 +69,23 @@ def setup_suite():
     }
 
     # Enforce install order through list.
-    for name in ['zookeeper', 'kafka', 'standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
+    for name in ['zookeeper', 'kafka']:
+        deployer = deployers[name]
+        runtime.set_deployer(name, deployer)
+        for instance, host in c(name + '_hosts').iteritems():
+            logger.info('Deploying {0} on host: {1}'.format(instance, host))
+            deployer.deploy(instance, {
+                'hostname': host
+            })
+
+
+    ### Use command line to create kafka topic since kafka python API doesn't allow to control partition count.
+    command="./kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 3 --topic standaloneIntegrationTestKafkaInputTopic"
+    p = Popen(command.split(' '), stdin=PIPE, stdout=PIPE, stderr=PIPE, env=env)
+    output, err = p.communicate()
+    logger.info("Output from run-job.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
+
+    for name in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
         deployer = deployers[name]
         runtime.set_deployer(name, deployer)
         for instance, host in c(name + '_hosts').iteritems():
