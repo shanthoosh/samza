@@ -2,10 +2,10 @@
   "standalone-processor-3_hosts": {
     "standalone-processor-3_instance_0": "localhost"
   },
-  "standalone-processor-3_start_cmd": "./bin/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain --config-path ./config/standalone.failure.test-processor-1.properties --operation run  & ",
-  "standalone-processor-3_stop_cmd": "",
+  "standalone-processor-3_start_cmd": "./bin/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain --config-path ./config/standalone.failure.test-processor-3.properties --operation run  & ",
+  "standalone-processor-3_stop_cmd": "./bin/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain --config-path ./config/standalone.failure.test-processor-3.properties --operation kill  &",
   "standalone-processor-3_install_path": "deploy/standalone-processor-3",
-  "standalone-processor-3_executable": "https://github.com/shanthoosh/samza/archive/standalone_failure_testing.zip",
+  "standalone-processor-3_executable": "samza-test_2.11-0.15.0-SNAPSHOT.tgz",
   "standalone-processor-3_post_install_cmds": [],
   "standalone-processor-3_logs": ["deploy/standalone-processor-3.log"]
 }

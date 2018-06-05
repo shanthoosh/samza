@@ -24,6 +24,7 @@ import org.apache.samza.application.StreamApplication;
 import org.apache.samza.config.Config;
 import org.apache.samza.runtime.ApplicationRunner;
 import org.apache.samza.runtime.ApplicationRunnerMain;
+import org.apache.samza.runtime.ApplicationRunnerOperation;
 import org.apache.samza.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,11 +48,18 @@ public class LocalApplicationRunnerMain {
     ApplicationRunner runner = ApplicationRunner.fromConfig(config);
     StreamApplication app = (StreamApplication) Class.forName(config.get(STREAM_APPLICATION_CLASS_CONFIG)).newInstance();
 
+    ApplicationRunnerOperation op = cmdLine.getOperation(options);
+
     try {
-      runner.run(app);
-      runner.waitForFinish();
+      if (op.equals(ApplicationRunnerOperation.RUN)) {
+        runner.run(app);
+        runner.waitForFinish();
+      } else if (op.equals(ApplicationRunnerOperation.KILL)) {
+        runner.kill(app);
+        runner.waitForFinish();
+      }
     } catch (Exception e) {
-      LOGGER.error("Exception occurred when launching stream application: {}.", app, e);
+      LOGGER.error("Exception occurred when invoking: {} on application: {}.", op, app, e);
     }
   }
 }
