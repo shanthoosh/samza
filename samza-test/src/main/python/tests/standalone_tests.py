@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 JOB_ID = 'test-app-id'
 PACKAGE_ID = 'tests'
-TEST_INPUT_TOPIC = 'testKafkaInputTopic-1'
-TEST_OUTPUT_TOPIC = 'testKafkaOutputTopic-1'
+TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
+TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 NUM_MESSAGES = 50
 
 def test_samza_job():
@@ -72,5 +72,6 @@ def _load_data():
         req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT,
         ack_timeout=30000)
     for i in range(1, NUM_MESSAGES + 1):
+        logger.info('Publishing message to: {0}'.format(TEST_INPUT_TOPIC))
         producer.send_messages(TEST_INPUT_TOPIC, str(i))
     kafka.close()

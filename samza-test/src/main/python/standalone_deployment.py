@@ -24,6 +24,9 @@ import zopkio.adhoc_deployer as adhoc_deployer
 from zopkio.runtime import get_active_config as c
 from subprocess import PIPE, Popen
 
+INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
+OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
+
 logger = logging.getLogger(__name__)
 deployers = {}
 
@@ -75,20 +78,38 @@ def _create_kafka_topic(zookeeper_servers, topic_name, partition_count, replicat
     logger.info('Current working directory: {0}'.format(base_dir))
 
     create_topic_command = 'sh {0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper {1} --replication-factor {2} --partitions {3} --topic {4}'.format(base_dir, zookeeper_servers, replication_factor, partition_count, topic_name)
-    logger.info("running command")
+    logger.info("Creating topic: {0}.".format(topic_name))
     logger.info(create_topic_command)
     p = Popen(create_topic_command.split(' '), stdin=PIPE, stdout=PIPE, stderr=PIPE)
     output, err = p.communicate()
-    logger.info("Output from kafka-topics.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
+    logger.info("Output from create kafka topic:\nstdout: {0}\nstderr: {1}".format(output, err))
+
+def _delete_kafka_topic(zookeeper_servers, topic_name):
+    base_dir = os.getcwd()
+
+    delete_topic_command = 'sh {0}/deploy/kafka/kafka_2.10-0.10.1.1/bin/kafka-topics.sh --delete --zookeeper {1} --topic {2}'.format(base_dir, zookeeper_servers, topic_name)
+    logger.info("Deleting topic: {0}.".format(topic_name))
+    logger.info(delete_topic_command)
+    p = Popen(delete_topic_command.split(' '), stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    output, err = p.communicate()
+    logger.info("Output from delete kafka topic:\nstdout: {0}\nstderr: {1}".format(output, err))
+
+
 
 ### Zopkio specific method that will be run once before all the integration tests.
 def setup_suite():
+
+    ## Download and deploy zk and kafka. Configuration for kafka, zookeeper are defined in kafka.json and zookeeper.json.
     _download_components(['zookeeper', 'kafka'])
 
     _deploy_components(['zookeeper', 'kafka'])
 
-    _create_kafka_topic('localhost:2181','standaloneIntegrationTestKafkaInputTopic', 3, 1)
+     ## Create I/O kafka topics.
+    _create_kafka_topic('localhost:2181', INPUT_TOPIC, 3, 1)
 
+    _create_kafka_topic('localhost:2181', OUTPUT_TOPIC, 3, 1)
+
+    ## Deploy the three standalone processors. Configurations for them are defined in standalone-processor-{id}.json.
     _deploy_components(['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
 
 ### Zopkio specific method that will be run once after all the integration tests.
@@ -98,3 +119,6 @@ def teardown_suite():
     for name, deployer in deployers.iteritems():
         for instance, host in c(name + '_hosts').iteritems():
             deployer.undeploy(instance)
+
+    _delete_kafka_topic('localhost:2181', OUTPUT_TOPIC)
+    _delete_kafka_topic('localhost:2181', INPUT_TOPIC)
