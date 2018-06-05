@@ -28,7 +28,6 @@ import time
 
 logger = logging.getLogger(__name__)
 deployers = None
-samza_install_path = None
 
 def _download_packages():
     for url_key in ['url_kafka', 'url_zookeeper']:
@@ -53,12 +52,30 @@ def _new_ssh_deployer(config_prefix, name=None):
         'sync': True,
     })
 
-def setup_suite():
-    global deployers, samza_install_path
-    logger.info('Current working directory: {0}'.format(os.getcwd()))
-    samza_install_path = os.path.join(c('remote_install_path'), c('samza_install_path'))
+def _deploy_components(deployers, components):
+    for name in components:
+        deployer = deployers[name]
+        runtime.set_deployer(name, deployer)
+        for instance, host in c(name + '_hosts').iteritems():
+            logger.info('Deploying {0} on host: {1}'.format(instance, host))
+            deployer.deploy(instance, {
+                 'hostname': host
+            })
 
-    _download_packages()
+            time.sleep(5)
+
+def _create_topic(topic_name, partition_count):
+    ### Use command line to create kafka topic since kafka python API doesn't allow to control partition count.
+    command='./kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions {0} --topic {1}'.format(partition_count, topic_name)
+    p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    output, err = p.communicate()
+    logger.info("Output from kafka-topics.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
+
+    _deploy_components(deployers, ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
+
+
+def setup_suite():
+    global deployers
 
     deployers = {
         'zookeeper': _new_ssh_deployer('zookeeper'),
@@ -68,33 +85,15 @@ def setup_suite():
         'standalone-processor-3': _new_ssh_deployer('standalone-processor-3'),
     }
 
-    # Enforce install order through list.
-    for name in ['zookeeper', 'kafka']:
-        deployer = deployers[name]
-        runtime.set_deployer(name, deployer)
-        for instance, host in c(name + '_hosts').iteritems():
-            logger.info('Deploying {0} on host: {1}'.format(instance, host))
-            deployer.deploy(instance, {
-                'hostname': host
-            })
+    logger.info('Current working directory: {0}'.format(os.getcwd()))
 
+    _download_packages()
 
-    ### Use command line to create kafka topic since kafka python API doesn't allow to control partition count.
-    command="./kafka_2.10-0.10.1.1/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 3 --topic standaloneIntegrationTestKafkaInputTopic"
-    p = Popen(command.split(' '), stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    output, err = p.communicate()
-    logger.info("Output from run-job.sh:\nstdout: {0}\nstderr: {1}".format(output, err))
+    _deploy_components(deployers, ['zookeeper', 'kafka'])
 
-    for name in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-        deployer = deployers[name]
-        runtime.set_deployer(name, deployer)
-        for instance, host in c(name + '_hosts').iteritems():
-            logger.info('Deploying {0} on host: {1}'.format(instance, host))
-            deployer.deploy(instance, {
-                'hostname': host
-            })
+    _create_topic('standaloneIntegrationTestKafkaInputTopic', 3)
 
-            time.sleep(5)
+    _deploy_components(deployers, ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
 
 def teardown_suite():
     # stream_application_deployer.uninstall('tests')
