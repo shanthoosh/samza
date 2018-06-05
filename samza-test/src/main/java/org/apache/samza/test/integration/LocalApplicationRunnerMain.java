@@ -53,7 +53,6 @@ public class LocalApplicationRunnerMain {
     try {
       if (op.equals(ApplicationRunnerOperation.RUN)) {
         runner.run(app);
-        runner.waitForFinish();
       } else if (op.equals(ApplicationRunnerOperation.KILL)) {
         runner.kill(app);
         runner.waitForFinish();
