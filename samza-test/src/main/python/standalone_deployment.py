@@ -78,7 +78,7 @@ def setup_suite():
 
             time.sleep(5)
 
-            logger.info('Starting instance: {0}', instance)
+            logger.info('Starting instance: {0}'.format(instance))
 
             deployer.start(instance)
 
