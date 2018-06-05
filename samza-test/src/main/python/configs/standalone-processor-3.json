@@ -2,10 +2,10 @@
   "standalone-processor-3_hosts": {
     "standalone-processor-3_instance_0": "localhost"
   },
-  "standalone-processor-3_start_cmd": "cd samza-standalone_failure_testing && ./gradlew clean build -x test &&  ./samza-shell/src/main/bash/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain  --config-path ./samza-test/src/main/config/standalone.failure.test-processor-3.properties --operation run & ; && cd ..",
+  "standalone-processor-3_start_cmd": "cd samza-standalone_failure_testing ; ./gradlew clean build -x test ;  ./samza-shell/src/main/bash/run-class.sh  org.apache.samza.test.integration.LocalApplicationRunnerMain  --config-path ./samza-test/src/main/config/standalone.failure.test-processor-3.properties --operation run  ; cd ..",
   "standalone-processor-3_stop_cmd": "",
   "standalone-processor-3_install_path": "deploy/standalone-processor-3",
   "standalone-processor-3_executable": "https://github.com/shanthoosh/samza/archive/standalone_failure_testing.zip",
   "standalone-processor-3_post_install_cmds": [],
-  "standalone-processor-3_logs": []
+  "standalone-processor-3_logs": ["deploy/standalone-processor-3.log"]
 }

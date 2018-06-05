@@ -19,7 +19,6 @@
 package org.apache.samza.test.integration;
 
 import org.apache.samza.application.StreamApplication;
-import org.apache.samza.config.ApplicationConfig;
 import org.apache.samza.config.Config;
 import org.apache.samza.operators.StreamGraph;
 import org.slf4j.Logger;
