@@ -27,7 +27,7 @@ from subprocess import PIPE, Popen
 logger = logging.getLogger(__name__)
 deployers = {}
 
-### Download all the components.
+### Download the components if unavailable in deployment directory using url defined in config.
 def _download_components(components):
     for component in components:
         url_key = 'url_{0}'.format(component)
@@ -40,7 +40,7 @@ def _download_components(components):
             logger.info('Downloading: {0}'.format(url))
             urllib.urlretrieve(url, filename)
 
-###
+### Install and start all the components(from param) through binaries in deployment directory.
 def _deploy_components(components):
     global deployers
 
