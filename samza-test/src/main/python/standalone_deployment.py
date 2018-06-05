@@ -82,7 +82,7 @@ def _create_kafka_topic(zookeeper_servers, topic_name, partition_count, replicat
     logger.info(create_topic_command)
     p = Popen(create_topic_command.split(' '), stdin=PIPE, stdout=PIPE, stderr=PIPE)
     output, err = p.communicate()
-    logger.info("Output from create kafka topic:\nstdout: {0}\nstderr: {1}".format(output, err))
+    logger.info("Output from create kafka topic: {0}\nstdout: {1}\nstderr: {2}".format(topic_name, output, err))
 
 def _delete_kafka_topic(zookeeper_servers, topic_name):
     base_dir = os.getcwd()
@@ -92,9 +92,7 @@ def _delete_kafka_topic(zookeeper_servers, topic_name):
     logger.info(delete_topic_command)
     p = Popen(delete_topic_command.split(' '), stdin=PIPE, stdout=PIPE, stderr=PIPE)
     output, err = p.communicate()
-    logger.info("Output from delete kafka topic:\nstdout: {0}\nstderr: {1}".format(output, err))
-
-
+    logger.info("Output from delete kafka topic: {0}\nstdout: {1}\nstderr: {2}".format(topic_name, output, err))
 
 ### Zopkio specific method that will be run once before all the integration tests.
 def setup_suite():
