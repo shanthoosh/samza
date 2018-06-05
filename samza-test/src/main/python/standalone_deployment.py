@@ -67,7 +67,7 @@ def setup_suite():
     }
 
     # Enforce install order through list.
-    for name in ['zookeeper', 'kafka', 'standalone-processor-1', 'standlaone-processor-2', 'standalone-processor-3']:
+    for name in ['zookeeper', 'kafka', 'standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
         deployer = deployers[name]
         runtime.set_deployer(name, deployer)
         for instance, host in c(name + '_hosts').iteritems():
