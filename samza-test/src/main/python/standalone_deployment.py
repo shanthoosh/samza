@@ -29,11 +29,7 @@ deployers = None
 samza_install_path = None
 
 def _download_packages():
-<<<<<<< HEAD
-    for url_key in ['url_kafka', 'url_zookeeper', 'standalone']:
-=======
     for url_key in ['url_kafka', 'url_zookeeper']:
->>>>>>> 4c924f6c849604c9274fe824cbb7df88b576d944
         logger.debug('Getting download URL for: {0}'.format(url_key))
         url = c(url_key)
         filename = os.path.basename(url)
