@@ -60,6 +60,15 @@ def validate_samza_job():
     kafka.close()
 
 def _load_data():
+
+    deployer1 = runtime.get_deployer('standalone-processor-1')
+    deployer2 = runtime.get_deployer('standalone-processor-2')
+    deployer3 = runtime.get_deployer('standalone-processor-3')
+
+    logger.info('Pid1: {0}'.format(deployer1.get_pid('standalone-processor-1')))
+    logger.info('Pid2: {0}'.format(deployer2.get_pid('standalone-processor-2')))
+    logger.info('Pid3: {0}'.format(deployer3.get_pid('standalone-processor-3')))
+
     """
     Sends 50 messages (1 .. 50) to samza-test-topic.
     """
@@ -72,6 +81,6 @@ def _load_data():
         req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT,
         ack_timeout=30000)
     for i in range(1, NUM_MESSAGES + 1):
-        logger.info('Publishing message to: {0}'.format(TEST_INPUT_TOPIC))
+        logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
         producer.send_messages(TEST_INPUT_TOPIC, str(i))
     kafka.close()
