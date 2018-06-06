@@ -19,6 +19,7 @@ import util
 import logging
 import zopkio.runtime as runtime
 from kafka import SimpleProducer, SimpleConsumer
+from pprint import pprint
 import struct
 
 logger = logging.getLogger(__name__)
@@ -69,10 +70,10 @@ def _load_data():
        deployer2 = runtime.get_deployer('standalone-processor-2')
        deployer3 = runtime.get_deployer('standalone-processor-3')
 
-       logger.info(dir(deployer1.get_processes))
-       logger.info(dir(deployer2.get_processes))
-       logger.info(dir(deployer3.get_processes))
-       logger.info(dir(runtime.get_deployers))
+       pprint(var(deployer1.get_processes))
+       pprint(var(deployer2.get_processes))
+       pprint(var(deployer3.get_processes))
+       pprint(var(runtime.get_deployers))
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.

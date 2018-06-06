@@ -36,15 +36,3 @@ def machine_logs():
     'yarn_rm_instance_0': log_paths['yarn_rm'],
     'yarn_nm_instance_0': log_paths['yarn_nm'],
   }
-
-def naarad_logs():
-  return {
-    'zookeeper_instance_0': [],
-    'kafka_instance_0': [],
-    'samza_instance_0': [],
-    'yarn_rm_instance_0': [],
-    'yarn_nm_instance_0': [],
-  }
-
-def naarad_config(config, test_name=None):
-  return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'naarad.cfg')
