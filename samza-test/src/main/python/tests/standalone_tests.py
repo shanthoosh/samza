@@ -71,10 +71,12 @@ def _load_data():
        deployer2 = runtime.get_deployer('standalone-processor-2')
        deployer3 = runtime.get_deployer('standalone-processor-3')
 
-       pprint(var(deployer1.get_processes))
-       pprint(var(deployer2.get_processes))
-       pprint(var(deployer3.get_processes))
-       pprint(var(runtime.get_deployers))
+       logger.info("Killing deployer-1 process")
+       deployer1.kill_all_process
+       logger.info("Killing deployer-2 process")
+       deployer2.kill_all_process
+       logger.info("Killing deployer-3 process")
+       deployer3.kill_all_process
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.
