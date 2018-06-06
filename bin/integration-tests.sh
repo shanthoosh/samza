@@ -77,7 +77,7 @@ SWITCHES="$*"
 
 # default to info-level debugging if not specified
 if [[ $SWITCHES != *"console-log-level"* ]]; then
-  SWITCHES="$SWITCHES --console-log-level INFO"
+  SWITCHES="$SWITCHES --console-log-level DEBUG"
 fi
 
 # run the tests
