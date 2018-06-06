@@ -64,7 +64,7 @@ def _deploy_components(components):
                 'hostname': host
             })
 
-            time.sleep(5)
+            time.sleep(10)
 
 ## zookeeper_servers: Comma seperated list of zookeeper servers of the form host:port.
 ## topic_name: kafka topic to be created.

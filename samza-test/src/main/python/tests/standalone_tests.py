@@ -65,7 +65,12 @@ def _load_data():
     deployer2 = runtime.get_deployer('standalone-processor-2')
     deployer3 = runtime.get_deployer('standalone-processor-3')
 
-    logger.info(deployer1.get_processes)
+    for process in deployer1.get_processes:
+        logger.info(process)
+
+    logger.info("killing processor-1")
+    deployer1.kill('standalone-processor-1')
+
     logger.info(deployer2.get_processes)
     logger.info(deployer3.get_processes)
 
