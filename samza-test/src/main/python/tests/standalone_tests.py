@@ -72,11 +72,11 @@ def _load_data():
        deployer3 = runtime.get_deployer('standalone-processor-3')
 
        logger.info("Killing deployer-1 process")
-       deployer1.kill_all_process
+       deployer1.kill('standalone-processor-1')
        logger.info("Killing deployer-2 process")
-       deployer2.kill_all_process
+       deployer2.kill('standalone-processor-2')
        logger.info("Killing deployer-3 process")
-       deployer3.kill_all_process
+       deployer3.kill('standalone-processor-3')
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.
