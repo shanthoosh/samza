@@ -52,11 +52,11 @@ def validate_samza_job():
     samza-test-topic-output.
     """
     logger.info('Running validate_samza_job')
-    kafka = util.get_kafka_client()
+    # kafka = util.get_kafka_client()
     # consumer = SimpleConsumer(kafka, 'samza-test-group', TEST_OUTPUT_TOPIC)
     # messages = consumer.get_messages(count=NUM_MESSAGES, block=True, timeout=300)
     # message_count = len(messages)
-    kafka.close()
+    # kafka.close()
 
 def _load_data():
 
