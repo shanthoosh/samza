@@ -62,33 +62,35 @@ def validate_samza_job():
 
 def _load_data():
 
-
-    logger.info("load-data")
-    deployer1 = runtime.get_deployer('standalone-processor-1')
-    deployer2 = runtime.get_deployer('standalone-processor-2')
-    deployer3 = runtime.get_deployer('standalone-processor-3')
-
-    for process in deployer1.get_processes:
-        logger.info(process)
-
-    logger.info("killing processor-1")
-    deployer1.kill('standalone-processor-1')
-
-    logger.info(deployer2.get_processes)
-    logger.info(deployer3.get_processes)
-
-    """
-    Sends 50 messages (1 .. 50) to samza-test-topic.
-    """
-    logger.info('Running test_samza_job')
-    kafka = util.get_kafka_client()
-    kafka.ensure_topic_exists(TEST_INPUT_TOPIC)
-    producer = SimpleProducer(
-        kafka,
-        async=False,
-        req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT,
-        ack_timeout=30000)
-    for i in range(1, NUM_MESSAGES + 1):
-        logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
-        producer.send_messages(TEST_INPUT_TOPIC, str(i))
-    kafka.close()
+    try:
+       logger.info("load-data")
+       deployer1 = runtime.get_deployer('standalone-processor-1')
+       deployer2 = runtime.get_deployer('standalone-processor-2')
+       deployer3 = runtime.get_deployer('standalone-processor-3')
+   
+       for process in deployer1.get_processes:
+           logger.info(process)
+   
+       logger.info("killing processor-1")
+       deployer1.kill('standalone-processor-1')
+   
+       logger.info(deployer2.get_processes)
+       logger.info(deployer3.get_processes)
+   
+       """
+       Sends 50 messages (1 .. 50) to samza-test-topic.
+       """
+       logger.info('Running test_samza_job')
+       kafka = util.get_kafka_client()
+       kafka.ensure_topic_exists(TEST_INPUT_TOPIC)
+       producer = SimpleProducer(
+           kafka,
+           async=False,
+           req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT,
+           ack_timeout=30000)
+       for i in range(1, NUM_MESSAGES + 1):
+           logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
+           producer.send_messages(TEST_INPUT_TOPIC, str(i))
+       kafka.close()
+    except:
+       print("Unexpected error:", sys.exc_info()[0])
