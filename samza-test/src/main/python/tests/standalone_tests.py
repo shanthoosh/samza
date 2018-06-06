@@ -43,6 +43,8 @@ def test_samza_job():
 
     for deployer in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
         config_file = deployer_name_to_config[deployer]
+        logger.info(deployer)
+        logger.info(config_file)
         util.start_job(PACKAGE_ID, JOB_ID, config_file, deployer)
         util.await_job(PACKAGE_ID, JOB_ID, deployer)
 
@@ -60,6 +62,8 @@ def validate_samza_job():
 
 def _load_data():
 
+
+    logger.info("load-data")
     deployer1 = runtime.get_deployer('standalone-processor-1')
     deployer2 = runtime.get_deployer('standalone-processor-2')
     deployer3 = runtime.get_deployer('standalone-processor-3')
