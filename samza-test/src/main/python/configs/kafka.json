@@ -13,7 +13,7 @@
     "sed -i.bak 's/.*log.dirs.*/log.dirs=data/g' kafka_2.10-0.10.1.1/config/server.properties"
   ],
   "kafka_logs": [
-    "log-cleaner.log",
+    "kafka_2.10-0.10.1.1/logs/log-cleaner.log",
     "kafka_2.10-0.10.1.1/logs/controller.log",
     "kafka_2.10-0.10.1.1/logs/kafka-request.log",
     "kafka_2.10-0.10.1.1/logs/kafkaServer-gc.log",
