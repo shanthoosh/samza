@@ -16,6 +16,7 @@
 # under the License.
 
 import util
+import sys
 import logging
 import zopkio.runtime as runtime
 from kafka import SimpleProducer, SimpleConsumer
@@ -91,4 +92,4 @@ def _load_data():
            producer.send_messages(TEST_INPUT_TOPIC, str(i))
        kafka.close()
     except:
-       print("Unexpected error:", sys.exc_info()[0])
+       logger.error("Unexpected error:" + sys.exc_info()[0])
