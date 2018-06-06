@@ -65,9 +65,9 @@ def _load_data():
     deployer2 = runtime.get_deployer('standalone-processor-2')
     deployer3 = runtime.get_deployer('standalone-processor-3')
 
-    logger.info('Pid1: {0}'.format(deployer1.get_pid('standalone-processor-1')))
-    logger.info('Pid2: {0}'.format(deployer2.get_pid('standalone-processor-2')))
-    logger.info('Pid3: {0}'.format(deployer3.get_pid('standalone-processor-3')))
+    logger.info(deployer1.get_processes)
+    logger.info(deployer2.get_processes)
+    logger.info(deployer3.get_processes)
 
     """
     Sends 50 messages (1 .. 50) to samza-test-topic.
