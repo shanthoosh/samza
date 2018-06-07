@@ -160,4 +160,5 @@ def _load_data():
            producer.send_messages(TEST_INPUT_TOPIC, str(i))
        kafka.close()
     except:
-       logger.error("Unexpected error: {0}, {1}, {2}".format(sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]))
+       logger.error("Error occurred when running test")
+       raise
