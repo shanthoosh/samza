@@ -19,6 +19,7 @@ import logging
 import socket
 import time
 import errno
+import os
 import zopkio.runtime as runtime
 from kafka import KafkaClient, SimpleProducer, SimpleConsumer
 from zopkio.runtime import get_active_config as c
