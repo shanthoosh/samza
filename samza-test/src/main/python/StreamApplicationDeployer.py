@@ -33,36 +33,37 @@ from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_
 logger = logging.getLogger(__name__)
 
 class StandaloneApplicationDeployer(Deployer):
-    def __init__(self, processor_ids = [], configs={}):
+
+    def __init__(self, processor_id, configs={}):
         logging.getLogger("paramiko").setLevel(logging.ERROR)
         # map from job_id to app_id
         self.username = runtime.get_username()
         self.password = runtime.get_password()
-        self.processor_ids = processor_ids
-        self.processor_id_to_process_id_map = {}
+        self.processor_id = processor_id
+        self.linux_processor_id = None
         self.default_configs = configs
         Deployer.__init__(self)
 
     def install(self, package_id, configs={}):
-        self.processor_ids = []
+        logger.info("Installing package_id: {0} with configs: {1}.".format(package_id, configs))
 
     def start(self, processor_ids, configs={}):
-        self.processor_ids = []
 
-    def get_processor_ids(self):
-        return self.processor_ids
 
-    def pause(self, processor_id, configs={}):
-        process_id = self.processor_id_to_process_id_map[processor_id]
-        exec "KILL -TSTP {0}".format(processor_id)
+    def get_processor_id(self):
+        return self.processor_id
 
-    def resume(self, processor_id, configs={}):
-        process_id = self.processor_id_to_process_id_map[processor_id]
-        exec "KILL -CONT {0}".format(processor_id)
+    def pause(self):
+        if self.linux_processor_id != None:
+            exec "KILL -SIGSTOP {0}".format(self.linux_processor_id)
 
-    def kill(self, processor_id, configs={}):
-        process_id = self.processor_id_to_process_id_map[processor_id]
-        exec "KILL -9 {0}".format(processor_id)
+    def resume(self):
+        if self.linux_processor_id != None:
+            exec "KILL -CONT {0}".format(self.linux_processor_id)
+
+    def kill(self):
+        if self.linux_processor_id != None:
+            exec "KILL -9 {0}".format(self.linux_processor_id)
 
     def _validate_configs(self, configs, config_keys):
         for required_config in config_keys:

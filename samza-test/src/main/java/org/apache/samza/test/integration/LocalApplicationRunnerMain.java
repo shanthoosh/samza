@@ -33,7 +33,7 @@ import static org.apache.samza.runtime.ApplicationRunnerMain.STREAM_APPLICATION_
 
 /**
  * ApplicationRunnerMain is built for yarn deployment and doesn't work for standalone.
- * Created for standalone failure tests.
+ * Created specifically for standalone failure tests and not intended to for general use.
  */
 public class LocalApplicationRunnerMain {
 
@@ -53,8 +53,6 @@ public class LocalApplicationRunnerMain {
     try {
       if (op.equals(ApplicationRunnerOperation.RUN)) {
         runner.run(app);
-      } else if (op.equals(ApplicationRunnerOperation.KILL)) {
-        runner.kill(app);
       }
       runner.waitForFinish();
     } catch (Exception e) {
