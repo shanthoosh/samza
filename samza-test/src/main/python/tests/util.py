@@ -61,6 +61,18 @@ def get_kafka_client(num_retries=20, retry_sleep=1):
     raise Exception('Unable to connect to Kafka broker: {0}:{1}'.format(kafka_hosts[0], kafka_port))
   return KafkaClient(connect_string)
 
+def get_deployer(component):
+  deployer = adhoc_deployer.SSHDeployer(component, {
+    'install_path': os.path.join(c('remote_install_path'), c(component + '_install_path')),
+    'executable': c(component + '_executable'),
+    'post_install_cmds': c(component + '_post_install_cmds', []),
+    'start_command': c(component + '_start_cmd'),
+    'stop_command': c(component + '_stop_cmd'),
+    'extract': True,
+    'sync': True,
+  })
+  return deployer
+
 def wait_for_server(host, port, timeout=5, retries=12):
   """
   Keep trying to connect to a host port until the retry count has been reached.

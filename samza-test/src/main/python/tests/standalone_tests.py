@@ -118,20 +118,20 @@ def _load_data():
 
     try:
        logger.info("load-data")
-       deployer1 = runtime.get_deployer('standalone-processor-1')
-       deployer2 = runtime.get_deployer('standalone-processor-2')
-       deployer3 = runtime.get_deployer('standalone-processor-3')
+       deployer1 = util.get_deployer('standalone-processor-1')
+       deployer2 = util.get_deployer('standalone-processor-2')
+       deployer3 = util.get_deployer('standalone-processor-3')
 
        processor_1_ids = get_pid('standalone-processor-1')
        logger.info("Killing deployer-1 process: {0}.".format(processor_1_ids))
        for processor_1_id in processor_1_ids:
             kill_process(processor_1_id)
        processor_2_ids = get_pid('standalone-processor-2')
-       logger.info("Killing deployer-1 process: {0}.".format(processor_2_ids))
+       logger.info("Killing deployer-2 process: {0}.".format(processor_2_ids))
        for processor_2_id in processor_2_ids:
             kill_process(processor_2_id)
        processor_3_ids = get_pid('standalone-processor-3')
-       logger.info("Killing deployer-1 process: {0}.".format(processor_3_ids))
+       logger.info("Killing deployer-3 process: {0}.".format(processor_3_ids))
        for processor_3_id in processor_3_ids:
             kill_process(processor_3_id)
 
