@@ -136,11 +136,13 @@ def _load_data():
             kill_process(processor_3_id)
 
        logger.info("Starting processor 1.")
-       deployer1.deploy('standalone-processor-1')
-       logger.info("Starting processor 2.")
-       deployer2.deploy('standalone-processor-2')
-       logger.info("Starting processor 3.")
-       deployer3.deploy('standalone-processor-3')
+       for component in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
+            deployer = util.get_deployer(component)
+            for instance, host in c(component + '_hosts').iteritems():
+                logger.info('Deploying {0} on host: {1}'.format(instance, host))
+                deployer.deploy(instance, {
+                    'hostname': host
+                })
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.
