@@ -135,8 +135,6 @@ def _load_data():
        for processor_3_id in processor_3_ids:
             kill_process(processor_3_id)
 
-       sleep(20)
-
        logger.info("Starting processor 1.")
        deployer1.deploy('standalone-processor-1')
        logger.info("Starting processor 2.")

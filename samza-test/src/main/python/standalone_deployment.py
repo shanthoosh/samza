@@ -115,6 +115,7 @@ def teardown_suite():
         _delete_kafka_topic('localhost:2181', topic)
 
     # Undeploy everything.
-    for name, deployer in ['zookeeper', 'kafka']:
-        for instance, host in c(name + '_hosts').iteritems():
+    for component in ['zookeeper', 'kafka']:
+        deployer = deployers[component]
+        for instance, host in c(component + '_hosts').iteritems():
             deployer.undeploy(instance)
