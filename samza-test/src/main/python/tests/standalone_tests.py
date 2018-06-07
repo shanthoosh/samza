@@ -84,7 +84,7 @@ def get_pid(process_name):
     logger.info("Username: {0}".format(runtime.get_username()))
     logger.info("Password: {0}".format(runtime.get_password()))
     with get_ssh_client('localhost', username=runtime.get_username(), password=runtime.get_password()) as ssh:
-        chan = exec_with_env(ssh, non_failing_command, msg="Failed to get PID", {})
+        chan = exec_with_env(ssh, non_failing_command, msg="Failed to get PID", env={})
     output = chan.recv(RECV_BLOCK_SIZE)
     full_output = output
     while len(output) > 0:
