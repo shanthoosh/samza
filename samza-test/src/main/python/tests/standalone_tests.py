@@ -60,8 +60,8 @@ def test_samza_job():
         config_file = deployer_name_to_config[deployer]
         logger.info(deployer)
         logger.info(config_file)
-        util.start_job(PACKAGE_ID, JOB_ID, config_file, deployer)
-        util.await_job(PACKAGE_ID, JOB_ID, deployer)
+        # util.start_job(PACKAGE_ID, JOB_ID, config_file, deployer)
+        # util.await_job(PACKAGE_ID, JOB_ID, deployer)
 
 def validate_samza_job():
     """
