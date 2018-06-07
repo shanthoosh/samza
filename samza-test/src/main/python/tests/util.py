@@ -65,11 +65,11 @@ def get_kafka_client(num_retries=20, retry_sleep=1):
 
 def get_deployer(component):
   deployer = adhoc_deployer.SSHDeployer(component, {
-    'install_path': os.path.join(c('remote_install_path'), c(component + '_install_path')),
-    'executable': c(component + '_executable'),
-    'post_install_cmds': c(component + '_post_install_cmds', []),
-    'start_command': c(component + '_start_cmd'),
-    'stop_command': c(component + '_stop_cmd'),
+    'install_path': os.path.join(runtime.get_active_config('remote_install_path'), runtime.get_active_config(component + '_install_path')),
+    'executable': runtime.get_active_config(component + '_executable'),
+    'post_install_cmds': runtime.get_active_config(component + '_post_install_cmds', []),
+    'start_command': runtime.get_active_config(component + '_start_cmd'),
+    'stop_command': runtime.get_active_config(component + '_stop_cmd'),
     'extract': True,
     'sync': True,
   })
