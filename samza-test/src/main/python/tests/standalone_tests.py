@@ -114,7 +114,6 @@ def resume_process(pid):
     result = execute_command(resume_command)
     logger.info("Result of suspend command: {0} is: {1}.".format(resume_command, result))
 
-
 def _load_data():
 
     try:
@@ -135,6 +134,15 @@ def _load_data():
        logger.info("Killing deployer-1 process: {0}.".format(processor_3_ids))
        for processor_3_id in processor_3_ids:
             kill_process(processor_3_id)
+
+       sleep(20)
+
+       logger.info("Starting processor 1.")
+       deployer1.deploy('standalone-processor-1')
+       logger.info("Starting processor 2.")
+       deployer2.deploy('standalone-processor-2')
+       logger.info("Starting processor 3.")
+       deployer3.deploy('standalone-processor-3')
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.

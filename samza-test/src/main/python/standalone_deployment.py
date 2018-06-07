@@ -110,10 +110,11 @@ def setup_suite():
 ### Zopkio specific method that will be run once after all the integration tests.
 def teardown_suite():
 
+    for topic in [INPUT_TOPIC, OUTPUT_TOPIC]:
+        logger.info("Deleting topic: {0}.".format(topic))
+        _delete_kafka_topic('localhost:2181', topic)
+
     # Undeploy everything.
-    for name, deployer in deployers.iteritems():
+    for name, deployer in ['zookeeper', 'kafka']:
         for instance, host in c(name + '_hosts').iteritems():
             deployer.undeploy(instance)
-
-    _delete_kafka_topic('localhost:2181', OUTPUT_TOPIC)
-    _delete_kafka_topic('localhost:2181', INPUT_TOPIC)
