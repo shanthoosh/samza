@@ -20,8 +20,20 @@ import sys
 import logging
 import zopkio.runtime as runtime
 from kafka import SimpleProducer, SimpleConsumer
-from pprint import pprint
 import struct
+import os
+import time
+import zipfile
+import urllib
+
+from subprocess import call
+
+import zopkio.constants as constants
+from zopkio.deployer import Deployer, Process
+from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
+
+import zopkio.runtime as runtime
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +75,26 @@ def validate_samza_job():
     # message_count = len(messages)
     # kafka.close()
 
+def get_pid(process_name):
+    RECV_BLOCK_SIZE = 16
+    pid_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
+    non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(pid_command)
+    logger.info("Process id command: {0}.".format(pid_command))
+    pids = []
+    logger.info("Username: {0}".format(runtime.get_username()))
+    logger.info("Password: {0}".format(runtime.get_password()))
+    with get_ssh_client('localhost', username=runtime.get_username(), password=runtime.get_password()) as ssh:
+        chan = exec_with_env(ssh, non_failing_command, msg="Failed to get PID", {})
+    output = chan.recv(RECV_BLOCK_SIZE)
+    full_output = output
+    while len(output) > 0:
+        output = chan.recv(RECV_BLOCK_SIZE)
+        full_output += output
+    if len(full_output) > 0:
+        pids = [int(pid_str) for pid_str in full_output.split('\n') if pid_str.isdigit()]
+
+    return pids
+
 def _load_data():
 
     try:
@@ -71,12 +103,12 @@ def _load_data():
        deployer2 = runtime.get_deployer('standalone-processor-2')
        deployer3 = runtime.get_deployer('standalone-processor-3')
 
-       logger.info("Killing deployer-1 process")
-       deployer1.kill('standalone-processor-1')
-       logger.info("Killing deployer-2 process")
-       deployer2.kill('standalone-processor-2')
-       logger.info("Killing deployer-3 process")
-       deployer3.kill('standalone-processor-3')
+       processor_1_id = get_pid('standalone-processor-1')
+       logger.info("Killing deployer-1 process: {0}.".format(processor_1_id))
+       processor_2_id = get_pid('standalone-processor-2')
+       logger.info("Killing deployer-1 process: {0}.".format(processor_2_id))
+       processor_3_id = get_pid('standalone-processor-3')
+       logger.info("Killing deployer-1 process: {0}.".format(processor_3_id))
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.
