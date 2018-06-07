@@ -75,25 +75,45 @@ def validate_samza_job():
     # message_count = len(messages)
     # kafka.close()
 
-def get_pid(process_name):
+def execute_command(command):
     RECV_BLOCK_SIZE = 16
-    pid_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
-    non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(pid_command)
-    logger.info("Process id command: {0}.".format(pid_command))
-    pids = []
-    logger.info("Username: {0}".format(runtime.get_username()))
-    logger.info("Password: {0}".format(runtime.get_password()))
-    with get_ssh_client('localhost', username=runtime.get_username(), password=runtime.get_password()) as ssh:
-        chan = exec_with_env(ssh, non_failing_command, msg="Failed to get PID", env={})
+    HOST_NAME = 'localhost'
+    with get_ssh_client(HOST_NAME, username=runtime.get_username(), password=runtime.get_password()) as ssh:
+        chan = exec_with_env(ssh, command, msg="Failed to get PID", env={})
     output = chan.recv(RECV_BLOCK_SIZE)
     full_output = output
     while len(output) > 0:
         output = chan.recv(RECV_BLOCK_SIZE)
         full_output += output
+    return full_output
+
+
+def get_pid(process_name):
+    pid_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
+    non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(pid_command)
+    logger.info("Process id command: {0}.".format(pid_command))
+    pids = []
+    full_output = execute_command(non_failing_command)
     if len(full_output) > 0:
         pids = [int(pid_str) for pid_str in full_output.split('\n') if pid_str.isdigit()]
 
     return pids
+
+def kill_process(pid):
+    kill_command = "kill -9 {0}".format(pid)
+    result = execute_command(kill_command)
+    logger.info("Result of kill command: {0} is: {1}.".format(kill_command, result))
+
+def pause_process(pid):
+    pause_command = "kill -SIGSTOP {0}".format(pid)
+    result = execute_command(pause_command)
+    logger.info("Result of suspend command: {0} is: {1}.".format(pause_command, result))
+
+def resume_process(pid):
+    resume_command = "kill -CONT {0}".format(pid)
+    result = execute_command(resume_command)
+    logger.info("Result of suspend command: {0} is: {1}.".format(resume_command, result))
+
 
 def _load_data():
 
@@ -105,10 +125,13 @@ def _load_data():
 
        processor_1_id = get_pid('standalone-processor-1')
        logger.info("Killing deployer-1 process: {0}.".format(processor_1_id))
+       kill_process(processor_1_id)
        processor_2_id = get_pid('standalone-processor-2')
        logger.info("Killing deployer-1 process: {0}.".format(processor_2_id))
+       kill_process(processor_2_id)
        processor_3_id = get_pid('standalone-processor-3')
        logger.info("Killing deployer-1 process: {0}.".format(processor_3_id))
+       kill_process(processor_3_id)
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.
