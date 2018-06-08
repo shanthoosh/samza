@@ -23,6 +23,8 @@ import os
 import zopkio.runtime as runtime
 from kafka import KafkaClient, SimpleProducer, SimpleConsumer
 import zopkio.adhoc_deployer as adhoc_deployer
+from kazoo.client import KazooClient
+import json
 
 logger = logging.getLogger(__name__)
 
