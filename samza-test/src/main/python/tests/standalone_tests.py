@@ -75,7 +75,7 @@ def get_job_model(jm_version):
 
     ### Dirty hack: Inbuilt data serializers in ZkClient persist data in the following format in zookeeper data node:
     ### class_name, length, actual_data.
-    # Primitive json deserialization without this custom string massaging fails.  After SAMZA-
+    ### Primitive json deserialization without this custom string massaging fails. Will be removed after SAMZA-1876.
     first_curly_index = job_model.find('{')
     job_model = job_model[first_curly_index: ]
 
