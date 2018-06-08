@@ -64,18 +64,16 @@ def test_samza_job():
         logger.info(deployer)
         logger.info(config_file)
 
-
 def get_job_model(jm_version):
     zk_client = KazooClient(hosts='127.0.0.1:2181')
     zk_client.start()
     logger.info("Fetching the JobModel with version: {0}.".format(jm_version))
     logger.info("Invoking getChildren on path: {0}".format(ZK_BASE_DIR))
-    for children_level1 in zk_client.get_children(ZK_BASE_DIR):
-        combined_path = '{0}/{1}'.format(ZK_BASE_DIR, children_level1)
-        logger.info("Level-1 children: {0}.".format(combined_path))
-        for children_level2 in zk_client.get_children(combined_path):
-            logger.info('Children level-2: {0}'.format(children_level2))
-
+    job_model_generation_path = '{0}/JobModelGeneration/jobModels/{1}'.format(ZK_BASE_DIR, jm_version)
+    job_model, _ = zk_client.get(job_model_generation_path)
+    logger.info('Retrieved job model.')
+    logger.info(job_model)
+    return job_model
 
 def validate_standalone_job():
     """
