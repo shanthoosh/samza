@@ -31,7 +31,7 @@ public class PassThroughFilter implements StreamApplication {
   @Override
   public void init(StreamGraph graph, Config config) {
     String inputStream = config.get("input.stream.name");
-    String outputStreamName = "testKafkaOutputTopic";
+    String outputStreamName = "standaloneIntegrationTestKafkaOutputTopic";
     LOGGER.info("Publishing message to: {}.", outputStreamName);
     graph.getInputStream(inputStream).sendTo(graph.getOutputStream(outputStreamName));
   }
