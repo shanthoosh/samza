@@ -35,8 +35,8 @@ from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_
 
 logger = logging.getLogger(__name__)
 
-APP_NAME=test-app-name
-APP_ID=test-app-id
+APP_NAME='test-app-name'
+APP_ID='test-app-id'
 ZK_BASE_DIR = '{0}.{1}'.format(APP_NAME, APP_ID)
 JOB_ID = 'test-app-id'
 PACKAGE_ID = 'tests'
