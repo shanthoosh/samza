@@ -72,6 +72,7 @@ def validate_samza_job():
     messages = consumer.get_messages(count=NUM_MESSAGES, block=True, timeout=300)
     message_count = len(messages)
     logger.info("Messages read count: {0}.".format(message_count))
+    assert NUM_MESSAGES == message_count, 'Expected {0} lines, but found {1}'.format(NUM_MESSAGES, message_count)
     kafka.close()
 
 def execute_command(command):
