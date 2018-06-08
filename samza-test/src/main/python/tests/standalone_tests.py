@@ -156,6 +156,11 @@ def _load_data():
            standalone_application_deployers.append(StandaloneApplicationDeployer(processor_id=processor_id, package_id=PACKAGE_ID, configs={}))
 
        for deployer in standalone_application_deployers:
+           deployer.deploy()
+
+
+
+       for deployer in standalone_application_deployers:
            processor_id = deployer.get_processor_id()
            logger.info("Killing process: {0}.".format(processor_id))
            deployer.kill()

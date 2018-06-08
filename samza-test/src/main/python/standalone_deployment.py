@@ -105,7 +105,7 @@ def setup_suite():
     _create_kafka_topic('localhost:2181', OUTPUT_TOPIC, 3, 1)
 
     ## Deploy the three standalone processors. Configurations for them are defined in standalone-processor-{id}.json.
-    _deploy_components(['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
+    # _deploy_components(['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
 
 ### Zopkio specific method that will be run once after all the integration tests.
 def teardown_suite():
