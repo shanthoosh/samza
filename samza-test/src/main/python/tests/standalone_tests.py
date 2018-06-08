@@ -160,5 +160,8 @@ def _load_data():
            producer.send_messages(TEST_INPUT_TOPIC, str(i))
        kafka.close()
     except:
-       logger.error("Error occurred when running test")
-       raise
+       traceback = sys.exc_info()[2]
+       formatted_lines = traceback.format_exc().splitlines()
+       logger.error("Unexpected error: {0}, {1}, {2}".format(sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]))
+       for line in formatted_lines:
+            logger.error(line)
