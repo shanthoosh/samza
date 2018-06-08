@@ -14,7 +14,24 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-
+import util
+import sys
+import logging
+import zopkio.runtime as runtime
+from kafka import SimpleProducer, SimpleConsumer
+import struct
+import os
+import time
+import zipfile
+import urllib
+import traceback
+from subprocess import call
+from kazoo.client import KazooClient
+import json
+import zopkio.constants as constants
+from zopkio.deployer import Deployer, Process
+from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
+from standalone_processor import StandaloneProcessor
 import util
 import logging
 import socket
@@ -39,6 +56,7 @@ def get_job_model_version(zk_base_dir):
         zk_client.start()
         job_model_generation_path = '{0}/JobModelGeneration/jobModelVersion'.format(zk_base_dir)
         job_model_version, _ = zk_client.get(job_model_generation_path)
+        logger.info('Retrieved job model version: {0}.'.format(job_model_version))
         return job_model_version
     finally:
         if zk_client is not None:
@@ -119,7 +137,10 @@ def get_leader_processor_id(zk_base_dir):
 
         logger.info('Retrieved processors.')
         logger.info(processor_ids)
-        return processor_ids
+        if len(processor_ids) > 0:
+            return processor_ids[0]
+        else:
+            return None
     finally:
         if zk_client is not None:
             zk_client.stop()

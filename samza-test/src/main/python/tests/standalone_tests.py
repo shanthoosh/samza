@@ -75,7 +75,7 @@ def test_kill_current_master():
         processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
         processors[processor_id].deploy()
 
-    version = zk_util.get_job_model_version()
+    version = zk_util.get_job_model_version(zk_base_dir=ZK_BASE_DIR)
 
     leader_processor_id = zk_util.get_leader_processor_id()
     leader_processor = processors[leader_processor_id]
