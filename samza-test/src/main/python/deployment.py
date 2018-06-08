@@ -95,6 +95,6 @@ def teardown_suite():
   samza_job_deployer.uninstall('tests')
 
   # Undeploy everything.
-  for name, deployer in deployers.iteritems():
+  for name, deployer in deployers.reverse().iteritems():
     for instance, host in c(name + '_hosts').iteritems():
       deployer.undeploy(instance)
