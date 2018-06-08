@@ -65,14 +65,18 @@ def get_job_model_version(zk_base_dir):
 ##
 ## TODO: Add docs.
 ##
-def get_job_model(zk_base_dir, jm_version):
+def get_latest_job_model(zk_base_dir):
     zk_client = None
     try:
         zk_client = KazooClient(hosts='127.0.0.1:2181')
         zk_client.start()
 
-        logger.info("Fetching the JobModel with version: {0}.".format(jm_version))
-        job_model_generation_path = '{0}/JobModelGeneration/jobModels/{1}'.format(zk_base_dir, jm_version)
+        childZkNodes = zk_client.get_children('{0}/JobModelGeneration/jobModels/')
+        logger.info("Retrieved childNodes: {0}.".format(childZkNodes))
+        childZkNodes.sort().reverse()
+
+        job_model_generation_path = '{0}/JobModelGeneration/jobModels/{1}'.format(zk_base_dir, childZkNodes[0])
+        logger.info('Fetching jobModel from path: {0}.'.format(job_model_generation_path))
         job_model, _ = zk_client.get(job_model_generation_path)
 
         """ 
@@ -115,10 +119,7 @@ def validate_output_stream(topic_name, expected_message_count):
         if kafka_client is not None:
             kafka_client.close()
 
-##
-## TODO: Add docs.
-##
-def get_leader_processor_id(zk_base_dir):
+def get_all_processors(zk_base_dir):
     zk_client = None
     try:
         logger.info("Executing get_leader_processor_id: {0}.".format(zk_base_dir))
@@ -129,6 +130,8 @@ def get_leader_processor_id(zk_base_dir):
         logger.info("Invoking getChildren on path: {0}".format(processors_path))
 
         childZkNodes = zk_client.get_children(processors_path)
+        childZkNodes.sort()
+
         logger.info("ChildZNodes of parent path: {0} is {1}.".format(processors_path, childZkNodes))
         processor_ids = []
         for childZkNode in childZkNodes:
@@ -144,6 +147,30 @@ def get_leader_processor_id(zk_base_dir):
             return processor_ids[0]
         else:
             return None
+    finally:
+        if zk_client is not None:
+            zk_client.stop()
+
+##
+## TODO: Add docs.
+##
+def get_leader_processor_id(zk_base_dir):
+    zk_client = None
+    try:
+        logger.info("Executing get_leader_processor_id: {0}.".format(zk_base_dir))
+        zk_client = KazooClient(hosts='127.0.0.1:2181')
+        zk_client.start()
+        processors_path =  '{0}/processors'.format(zk_base_dir)
+
+        logger.info("Invoking getChildren on path: {0}".format(processors_path))
+
+        childZkNodes = zk_client.get_children(processors_path)
+        childZkNodes.sort()
+        child_processor_path = '{0}/{1}'.format(processors_path, childZkNodes[0])
+        logger.info("Invoking getData on path: {0}".format(child_processor_path))
+        processor_data, _ = zk_client.get(child_processor_path)
+        host, processor_id = processor_data.split(" ")
+        return processor_id
     finally:
         if zk_client is not None:
             zk_client.stop()
