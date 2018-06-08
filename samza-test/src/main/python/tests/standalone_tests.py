@@ -44,8 +44,6 @@ TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 NUM_MESSAGES = 50
 
-zk_client = KazooClient(hosts='127.0.0.1:2181')
-zk_client.start()
 
 def test_samza_job():
     """
@@ -71,6 +69,8 @@ def test_samza_job():
 
 
 def get_job_model(jm_version):
+    zk_client = KazooClient(hosts='127.0.0.1:2181')
+    zk_client.start()
     logger.info("Fetching the JobModel with version: {0}.".format(jm_version))
     logger.info("Invoking getChildren on path: {0}".format(ZK_BASE_DIR))
     for children_level1 in zk_client.get_children(ZK_BASE_DIR):
