@@ -79,7 +79,7 @@ def test_kill_current_master():
 
         version = zk_util.get_job_model_version(zk_base_dir=ZK_BASE_DIR)
 
-        leader_processor_id = zk_util.get_leader_processor_id()
+        leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         leader_processor = processors[leader_processor_id]
 
         leader_processor.kill()
