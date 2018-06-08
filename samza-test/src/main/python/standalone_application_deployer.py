@@ -27,24 +27,20 @@ import zopkio.runtime as runtime
 import templates
 from subprocess import PIPE, Popen
 from zopkio.deployer import Deployer, Process
-from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file
+from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
 import util
 import sys
 import logging
 import zopkio.runtime as runtime
 from kafka import SimpleProducer, SimpleConsumer
 import struct
-import os
 import time
 import zipfile
 import urllib
 import traceback
 from subprocess import call
 from kazoo.client import KazooClient
-import json
 import zopkio.constants as constants
-from zopkio.deployer import Deployer, Process
-from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
 
 logger = logging.getLogger(__name__)
 
@@ -59,26 +55,25 @@ class StandaloneApplicationDeployer():
         self.processor_id = processor_id
         self.package_id = package_id
         self.configs = configs
+        self.deployer = util.get_deployer(self.processor_id)
 
     ##
     ## TODO: Add docs.
     ##
     def deploy(self):
         logger.info("Deploying processor with id: {0} and configs: {1}.".format(self.processor_id, self.configs))
-        deployer = util.get_deployer(self.processor_id)
         for instance, host in runtime.get_active_config(self.processor_id + '_hosts').iteritems():
             logger.info('Deploying {0} on host: {1}'.format(instance, host))
-            deployer.deploy(instance, {'hostname': host})
+            self.deployer.deploy(instance, {'hostname': host})
 
     ##
     ## TODO: Add docs.
     ##
     def stop(self):
         logger.info("Stopping processor with id: {0}.".format(self.package_id))
-        deployer = util.get_deployer(self.processor_id)
         for instance, host in runtime.get_active_config(self.processor_id + '_hosts').iteritems():
             logger.info('Stopping {0} on host: {1}'.format(instance, host))
-            deployer.stop(instance, {'hostname': host})
+            self.deployer.stop(instance, {'hostname': host})
 
     ##
     ## TODO: Add docs.
@@ -90,25 +85,40 @@ class StandaloneApplicationDeployer():
     ## TODO: Add docs.
     ##
     def kill(self):
-        kill_command = "kill -9 {0}".format(self.processor_id)
-        result = __execute_command(kill_command)
-        logger.info("Result of kill command: {0} is: {1}.".format(kill_command, result))
+        self.__do_send_signal("kill", "SIGKILL")
 
     ##
     ## TODO: Add docs.
     ##
     def pause(self):
-        pause_command = "kill -SIGSTOP {0}".format(self.processor_id)
-        result = __execute_command(pause_command)
-        logger.info("Result of pause command: {0} is: {1}.".format(pause_command, result))
+        self.__do_send_signal("pause", "SIGSTOP")
 
     ##
     ## TODO: Add docs.
     ##
     def resume(self):
-        resume_command = "kill -CONT {0}".format(self.processor_id)
-        result = __execute_command(resume_command)
-        logger.info("Result of resume command: {0} is: {1}.".format(resume_command, result))
+        self.__do_send_signal("resume", "CONT")
+
+    ##
+    ## TODO: Add docs.
+    ##
+    def __do_send_signal(self, command_type, signal):
+        command = "kill -{0} {1}".format(signal, self.processor_id)
+        result = self.__execute_command(command)
+        logger.info("Result of {0} command: {1} is: {2}.".format(command_type, command, result))
+
+    ##
+    ## TODO: Add docs.
+    ##
+    def __get_pid(self, process_name):
+        pid_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
+        non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(pid_command)
+        logger.info("Process id command: {0}.".format(pid_command))
+        pids = []
+        full_output = self.__execute_command(non_failing_command)
+        if len(full_output) > 0:
+            pids = [int(pid_str) for pid_str in full_output.split('\n') if pid_str.isdigit()]
+        return pids
 
     ##
     ## TODO: Add docs.
@@ -124,29 +134,3 @@ class StandaloneApplicationDeployer():
             output = chan.recv(RECV_BLOCK_SIZE)
             full_output += output
         return full_output
-
-    ##
-    ## TODO: Add docs.
-    ##
-    def __get_pid(self, process_name):
-        pid_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
-        non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(pid_command)
-        logger.info("Process id command: {0}.".format(pid_command))
-        pids = []
-        full_output = __execute_command(self, non_failing_command)
-        if len(full_output) > 0:
-            pids = [int(pid_str) for pid_str in full_output.split('\n') if pid_str.isdigit()]
-        return pids
-
-
-    def _validate_configs(self, configs, config_keys):
-        for required_config in config_keys:
-            assert configs.get(required_config), 'Required config is undefined: {0}'.format(required_config)
-
-    def _get_merged_configs(self, configs):
-        tmp = self.default_configs.copy()
-        tmp.update(configs)
-        return tmp
-
-    def get_package_tgz_name(self, package_id):
-        return '{0}.tgz'.format(package_id)

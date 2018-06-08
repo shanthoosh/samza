@@ -73,9 +73,15 @@ def get_job_model(jm_version):
     job_model_generation_path = '{0}/JobModelGeneration/jobModels/{1}'.format(ZK_BASE_DIR, jm_version)
     job_model, _ = zk_client.get(job_model_generation_path)
 
-    ### Dirty hack: Inbuilt data serializers in ZkClient persist data in the following format in zookeeper data node:
-    ### class_name, length, actual_data.
-    ### Primitive json deserialization without this custom string massaging fails. Will be removed after SAMZA-1876.
+    """ 
+    Dirty hack: Inbuilt data serializers in ZkClient persist data in the following format in zookeeper data nodes:
+    
+            class_name, data_length, actual_data
+    
+    JobModel json manipulation: Delete all the characters before first occurrence of '{' in jobModel json string.
+    Primitive json deserialization without this custom string massaging fails. This will be removed after SAMZA-1876.
+    """
+
     first_curly_index = job_model.find('{')
     job_model = job_model[first_curly_index: ]
 
@@ -111,7 +117,6 @@ def execute_command(command):
         full_output += output
     return full_output
 
-
 def get_pid(process_name):
     pid_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
     non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(pid_command)
@@ -140,11 +145,10 @@ def resume_process(pid):
 
 def _load_data():
 
+    processor_ids = ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']
+
     try:
        logger.info("load-data")
-       deployer1 = util.get_deployer('standalone-processor-1')
-       deployer2 = util.get_deployer('standalone-processor-2')
-       deployer3 = util.get_deployer('standalone-processor-3')
 
        processor_1_ids = get_pid('standalone-processor-1')
        logger.info("Killing deployer-1 process: {0}.".format(processor_1_ids))
