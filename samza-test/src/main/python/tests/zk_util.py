@@ -71,7 +71,7 @@ def get_latest_job_model(zk_base_dir):
         zk_client = KazooClient(hosts='127.0.0.1:2181')
         zk_client.start()
 
-        childZkNodes = zk_client.get_children('{0}/JobModelGeneration/jobModels/')
+        childZkNodes = zk_client.get_children('{0}/JobModelGeneration/jobModels/'.format(zk_base_dir))
         logger.info("Retrieved childNodes: {0}.".format(childZkNodes))
         childZkNodes.sort().reverse()
 

@@ -54,7 +54,7 @@ def test_samza_job():
     """
     _load_data()
 
-    job_model_dict = zk_util.get_job_model(ZK_BASE_DIR, 1)
+    job_model_dict = zk_util.get_latest_job_model(ZK_BASE_DIR)
 
     logger.info("Job model dict: {0}".format(job_model_dict))
 
