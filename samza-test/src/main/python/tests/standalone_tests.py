@@ -28,7 +28,7 @@ import urllib
 import traceback
 from subprocess import call
 from kazoo.client import KazooClient
-
+import json
 import zopkio.constants as constants
 from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
@@ -51,7 +51,8 @@ def test_samza_job():
     """
     _load_data()
 
-    get_job_model(1)
+    job_model_dict = get_job_model(1)
+    logger.info("Job model dict: {0}".format(job_model_dict))
 
     deployer_name_to_config = {
         'standalone-processor-1' : 'config/standalone.failure.test-processor-1.properties',
@@ -71,9 +72,17 @@ def get_job_model(jm_version):
     logger.info("Invoking getChildren on path: {0}".format(ZK_BASE_DIR))
     job_model_generation_path = '{0}/JobModelGeneration/jobModels/{1}'.format(ZK_BASE_DIR, jm_version)
     job_model, _ = zk_client.get(job_model_generation_path)
+
+    ### Dirty hack: Inbuilt data serializers in ZkClient persist data in zookeeper data node of following format:
+    ### class_name, length, json_data.
+    # Primitive json deserialization without this custom string massaging fails.
+    first_curly_index = job_model.find('{')
+    job_model = job_model[first_curly_index: ]
+
     logger.info('Retrieved job model.')
     logger.info(job_model)
-    return job_model
+    job_model_dict = json.loads(job_model)
+    return job_model_dict
 
 def validate_standalone_job():
     """
