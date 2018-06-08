@@ -98,21 +98,9 @@ def test_kill_current_master():
         logger.error(traceback.format_exc(sys.exc_info()))
 
 def _load_data():
-
+    kafka = None
     try:
        logger.info("load-data")
-
-    # for processor in processors:
-    #     processor.deploy()
-    #     processor_id = processor.get_processor_id()
-    #     logger.info("Killing processor with id: {0}.".format(processor_id))
-    #     processor.kill()
-
-
-       """
-       Sends 50 messages (1 .. 50) to samza-test-topic.
-       """
-       logger.info('Running test_samza_job')
        kafka = util.get_kafka_client()
        kafka.ensure_topic_exists(TEST_INPUT_TOPIC)
        producer = SimpleProducer(
@@ -123,6 +111,8 @@ def _load_data():
        for i in range(1, NUM_MESSAGES + 1):
            logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
            producer.send_messages(TEST_INPUT_TOPIC, str(i))
-       kafka.close()
     except:
        logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        if kafka is not None:
+            kafka.close()
