@@ -70,6 +70,7 @@ def test_samza_job():
         logger.info(config_file)
 
 def test_kill_current_master():
+    logger.info("Executing kill current master test!")
     processors = {}
     for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
         processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
