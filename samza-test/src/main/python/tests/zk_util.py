@@ -54,10 +54,10 @@ def get_job_model_version(zk_base_dir):
     try:
         zk_client = KazooClient(hosts='127.0.0.1:2181')
         zk_client.start()
-        job_model_generation_path = '{0}/JobModelGeneration/jobModelVersion'.format(zk_base_dir)
-        job_model_version, _ = zk_client.get(job_model_generation_path)
-        logger.info('Retrieved job model version: {0}.'.format(job_model_version))
-        return job_model_version
+        job_model_version_path = '{0}/JobModelGeneration/jobModelVersion'.format(zk_base_dir)
+        job_model_version, stat = zk_client.get(job_model_version_path)
+        logger.info('Retrieved job model version: {0}, stat.version: {1}.'.format(job_model_version, stat.version))
+        return stat.version
     finally:
         if zk_client is not None:
             zk_client.stop()
