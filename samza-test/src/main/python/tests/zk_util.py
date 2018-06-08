@@ -73,9 +73,10 @@ def get_latest_job_model(zk_base_dir):
 
         childZkNodes = zk_client.get_children('{0}/JobModelGeneration/jobModels/'.format(zk_base_dir))
         logger.info("Retrieved childNodes: {0}.".format(childZkNodes))
-        childZkNodes.sort().reverse()
+        childZkNodes.sort()
+        childZkNodes.reverse()
 
-        job_model_generation_path = '{0}/JobModelGeneration/jobModels/{1}'.format(zk_base_dir, childZkNodes[0])
+        job_model_generation_path = '{0}/JobModelGeneration/jobModels/{1}/'.format(zk_base_dir, childZkNodes[0])
         logger.info('Fetching jobModel from path: {0}.'.format(job_model_generation_path))
         job_model, _ = zk_client.get(job_model_generation_path)
 
