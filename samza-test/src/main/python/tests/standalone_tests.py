@@ -32,9 +32,6 @@ import zopkio.constants as constants
 from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
 
-import zopkio.runtime as runtime
-
-
 logger = logging.getLogger(__name__)
 
 JOB_ID = 'test-app-id'
@@ -138,7 +135,7 @@ def _load_data():
        logger.info("Starting processor 1.")
        for component in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
             deployer = util.get_deployer(component)
-            for instance, host in c(component + '_hosts').iteritems():
+            for instance, host in runtime.get_active_config(component + '_hosts').iteritems():
                 logger.info('Deploying {0} on host: {1}'.format(instance, host))
                 deployer.deploy(instance, {
                     'hostname': host
