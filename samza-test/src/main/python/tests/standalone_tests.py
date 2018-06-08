@@ -32,7 +32,7 @@ import json
 import zopkio.constants as constants
 from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
-from standalone_application_deployer import StandaloneApplicationDeployer
+from standalone_processor import StandaloneProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -108,82 +108,20 @@ def validate_standalone_job():
     assert NUM_MESSAGES == message_count, 'Expected {0} lines, but found {1}'.format(NUM_MESSAGES, message_count)
     kafka.close()
 
-def execute_command(command):
-    RECV_BLOCK_SIZE = 16
-    HOST_NAME = 'localhost'
-    with get_ssh_client(HOST_NAME, username=runtime.get_username(), password=runtime.get_password()) as ssh:
-        chan = exec_with_env(ssh, command, msg="Failed to get PID", env={})
-    output = chan.recv(RECV_BLOCK_SIZE)
-    full_output = output
-    while len(output) > 0:
-        output = chan.recv(RECV_BLOCK_SIZE)
-        full_output += output
-    return full_output
-
-def get_pid(process_name):
-    pid_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
-    non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(pid_command)
-    logger.info("Process id command: {0}.".format(pid_command))
-    pids = []
-    full_output = execute_command(non_failing_command)
-    if len(full_output) > 0:
-        pids = [int(pid_str) for pid_str in full_output.split('\n') if pid_str.isdigit()]
-
-    return pids
-
-def kill_process(pid):
-    kill_command = "kill -9 {0}".format(pid)
-    result = execute_command(kill_command)
-    logger.info("Result of kill command: {0} is: {1}.".format(kill_command, result))
-
-def pause_process(pid):
-    pause_command = "kill -SIGSTOP {0}".format(pid)
-    result = execute_command(pause_command)
-    logger.info("Result of suspend command: {0} is: {1}.".format(pause_command, result))
-
-def resume_process(pid):
-    resume_command = "kill -CONT {0}".format(pid)
-    result = execute_command(resume_command)
-    logger.info("Result of suspend command: {0} is: {1}.".format(resume_command, result))
-
 def _load_data():
 
     try:
        logger.info("load-data")
 
-       standalone_application_deployers = []
+       processors = []
        for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-           standalone_application_deployers.append(StandaloneApplicationDeployer(processor_id=processor_id, package_id=PACKAGE_ID, configs={}))
+           processors.append(StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={}))
 
-       for deployer in standalone_application_deployers:
-           deployer.deploy()
-
-       for deployer in standalone_application_deployers:
-           processor_id = deployer.get_processor_id()
-           logger.info("Killing process: {0}.".format(processor_id))
-           deployer.kill()
-
-       # processor_1_ids = get_pid('standalone-processor-1')
-       # logger.info("Killing deployer-1 process: {0}.".format(processor_1_ids))
-       # for processor_1_id in processor_1_ids:
-       #      kill_process(processor_1_id)
-       # processor_2_ids = get_pid('standalone-processor-2')
-       # logger.info("Killing deployer-2 process: {0}.".format(processor_2_ids))
-       # for processor_2_id in processor_2_ids:
-       #      kill_process(processor_2_id)
-       # processor_3_ids = get_pid('standalone-processor-3')
-       # logger.info("Killing deployer-3 process: {0}.".format(processor_3_ids))
-       # for processor_3_id in processor_3_ids:
-       #      kill_process(processor_3_id)
-       #
-       # logger.info("Starting processor 1.")
-       # for component in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-       #      deployer = util.get_deployer(component)
-       #      for instance, host in runtime.get_active_config(component + '_hosts').iteritems():
-       #          logger.info('Deploying {0} on host: {1}'.format(instance, host))
-       #          deployer.deploy(instance, {
-       #              'hostname': host
-       #          })
+       for processor in processors:
+           processor.deploy()
+           processor_id = processor.get_processor_id()
+           logger.info("Killing processor with id: {0}.".format(processor_id))
+           processor.kill()
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.

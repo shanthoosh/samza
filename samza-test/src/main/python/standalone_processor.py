@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 ##
 ## TODO: Add class level docs.
 ##
-class StandaloneApplicationDeployer():
+class StandaloneProcessor():
 
     def __init__(self, processor_id, package_id, configs={}):
         self.username = runtime.get_username()
