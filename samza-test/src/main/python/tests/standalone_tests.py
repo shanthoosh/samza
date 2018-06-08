@@ -35,15 +35,14 @@ from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_
 
 logger = logging.getLogger(__name__)
 
-APP_NAME='test-app-name'
-APP_ID='test-app-id'
-ZK_BASE_DIR = '{0}.{1}'.format(APP_NAME, APP_ID)
-JOB_ID = 'test-app-id'
+APP_NAME = 'test-app-name'
+APP_ID = 'test-app-id'
+ZK_BASE_DIR='app-{0}-{1}/{2}-{3}-coordinationData'.format(APP_NAME, APP_ID, APP_NAME, APP_ID)
+
 PACKAGE_ID = 'tests'
 TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 NUM_MESSAGES = 50
-
 
 def test_samza_job():
     """
@@ -64,8 +63,6 @@ def test_samza_job():
         config_file = deployer_name_to_config[deployer]
         logger.info(deployer)
         logger.info(config_file)
-        # util.start_job(PACKAGE_ID, JOB_ID, config_file, deployer)
-        # util.await_job(PACKAGE_ID, JOB_ID, deployer)
 
 
 def get_job_model(jm_version):
