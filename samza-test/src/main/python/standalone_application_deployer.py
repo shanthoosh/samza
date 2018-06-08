@@ -103,7 +103,8 @@ class StandaloneApplicationDeployer():
     ## TODO: Add docs.
     ##
     def __send_signal_to_processor(self, command_type, signal):
-        command = "kill -{0} {1}".format(signal, self.processor_id)
+        linux_process_pid = self.__get_pid(self.processor_id)
+        command = "kill -{0} {1}".format(signal, linux_process_pid)
         result = self.__execute_command(command)
         logger.info("Result of {0} command: {1} is: {2}.".format(command_type, command, result))
 
