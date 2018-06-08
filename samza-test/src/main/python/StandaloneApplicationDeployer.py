@@ -25,7 +25,6 @@ import tarfile
 import zopkio.constants as constants
 import zopkio.runtime as runtime
 import templates
-
 from subprocess import PIPE, Popen
 from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file
@@ -52,16 +51,14 @@ logger = logging.getLogger(__name__)
 ##
 ## TODO: Add class level docs.
 ##
-class StandaloneApplicationDeployer(Deployer):
+class StandaloneApplicationDeployer():
 
     def __init__(self, processor_id, package_id, configs):
-        logging.getLogger("paramiko").setLevel(logging.ERROR)
         self.username = runtime.get_username()
         self.password = runtime.get_password()
         self.processor_id = processor_id
         self.package_id = package_id
         self.configs = configs
-        Deployer.__init__(self)
 
     ##
     ## TODO: Add docs.
