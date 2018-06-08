@@ -75,12 +75,14 @@ def get_job_model(jm_version):
     job_model, _ = zk_client.get(job_model_generation_path)
 
     """ 
-    Dirty hack: Inbuilt data serializers in ZkClient persist data in the following format in zookeeper data nodes:
+    Dirty hack: Inbuilt data serializers in ZkClient java library persist data in the following format in zookeeper data nodes:
     
             class_name, data_length, actual_data
     
     JobModel json manipulation: Delete all the characters before first occurrence of '{' in jobModel json string.
-    Primitive json deserialization without this custom string massaging fails. This will be removed after SAMZA-1876.
+    
+    Primitive json deserialization without the above custom string massaging fails. This will be removed after SAMZA-1876.
+    
     """
 
     first_curly_index = job_model.find('{')
@@ -146,32 +148,38 @@ def resume_process(pid):
 
 def _load_data():
 
-    processor_ids = ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']
-    standalone_application_deployers = []
     try:
        logger.info("load-data")
 
-       processor_1_ids = get_pid('standalone-processor-1')
-       logger.info("Killing deployer-1 process: {0}.".format(processor_1_ids))
-       for processor_1_id in processor_1_ids:
-            kill_process(processor_1_id)
-       processor_2_ids = get_pid('standalone-processor-2')
-       logger.info("Killing deployer-2 process: {0}.".format(processor_2_ids))
-       for processor_2_id in processor_2_ids:
-            kill_process(processor_2_id)
-       processor_3_ids = get_pid('standalone-processor-3')
-       logger.info("Killing deployer-3 process: {0}.".format(processor_3_ids))
-       for processor_3_id in processor_3_ids:
-            kill_process(processor_3_id)
+       standalone_application_deployers = []
+       for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
+           standalone_application_deployers.append(StandaloneApplicationDeployer(processor_id=processor_id, package_id=PACKAGE_ID, configs={}))
 
-       logger.info("Starting processor 1.")
-       for component in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-            deployer = util.get_deployer(component)
-            for instance, host in runtime.get_active_config(component + '_hosts').iteritems():
-                logger.info('Deploying {0} on host: {1}'.format(instance, host))
-                deployer.deploy(instance, {
-                    'hostname': host
-                })
+       for deployer in standalone_application_deployers:
+            logger.info("Killing process: {0}.".format(deployer.get_processor_id))
+            deployer.kill
+
+       # processor_1_ids = get_pid('standalone-processor-1')
+       # logger.info("Killing deployer-1 process: {0}.".format(processor_1_ids))
+       # for processor_1_id in processor_1_ids:
+       #      kill_process(processor_1_id)
+       # processor_2_ids = get_pid('standalone-processor-2')
+       # logger.info("Killing deployer-2 process: {0}.".format(processor_2_ids))
+       # for processor_2_id in processor_2_ids:
+       #      kill_process(processor_2_id)
+       # processor_3_ids = get_pid('standalone-processor-3')
+       # logger.info("Killing deployer-3 process: {0}.".format(processor_3_ids))
+       # for processor_3_id in processor_3_ids:
+       #      kill_process(processor_3_id)
+       #
+       # logger.info("Starting processor 1.")
+       # for component in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
+       #      deployer = util.get_deployer(component)
+       #      for instance, host in runtime.get_active_config(component + '_hosts').iteritems():
+       #          logger.info('Deploying {0} on host: {1}'.format(instance, host))
+       #          deployer.deploy(instance, {
+       #              'hostname': host
+       #          })
 
        """
        Sends 50 messages (1 .. 50) to samza-test-topic.
