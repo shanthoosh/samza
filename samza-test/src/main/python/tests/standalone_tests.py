@@ -25,7 +25,7 @@ import os
 import time
 import zipfile
 import urllib
-
+import traceback
 from subprocess import call
 
 import zopkio.constants as constants
@@ -160,8 +160,4 @@ def _load_data():
            producer.send_messages(TEST_INPUT_TOPIC, str(i))
        kafka.close()
     except:
-       traceback = sys.exc_info()[2]
-       formatted_lines = traceback.format_exc().splitlines()
-       logger.error("Unexpected error: {0}, {1}, {2}".format(sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]))
-       for line in formatted_lines:
-            logger.error(line)
+       logger.error(traceback.format_exc(sys.exc_info()))
