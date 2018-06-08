@@ -27,6 +27,7 @@ import zipfile
 import urllib
 import traceback
 from subprocess import call
+from kazoo.client import KazooClient
 
 import zopkio.constants as constants
 from zopkio.deployer import Deployer, Process
@@ -34,11 +35,17 @@ from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_
 
 logger = logging.getLogger(__name__)
 
+APP_NAME=test-app-name
+APP_ID=test-app-id
+ZK_BASE_DIR = '{0}.{1}'.format(APP_NAME, APP_ID)
 JOB_ID = 'test-app-id'
 PACKAGE_ID = 'tests'
 TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 NUM_MESSAGES = 50
+
+zk_client = KazooClient(hosts='127.0.0.1:2181')
+zk_client.start()
 
 def test_samza_job():
     """
@@ -46,6 +53,8 @@ def test_samza_job():
     integer, and outputs to a Kafka topic.
     """
     _load_data()
+
+    get_job_model(1)
 
     deployer_name_to_config = {
         'standalone-processor-1' : 'config/standalone.failure.test-processor-1.properties',
@@ -60,7 +69,18 @@ def test_samza_job():
         # util.start_job(PACKAGE_ID, JOB_ID, config_file, deployer)
         # util.await_job(PACKAGE_ID, JOB_ID, deployer)
 
-def validate_samza_job():
+
+def get_job_model(jm_version):
+    logger.info("Fetching the JobModel with version: {0}.".format(jm_version))
+    logger.info("Invoking getChildren on path: {0}".format(ZK_BASE_DIR))
+    for children_level1 in zk_client.get_children(ZK_BASE_DIR):
+        combined_path = '{0}/{1}'.format(ZK_BASE_DIR, children_level1)
+        logger.info("Level-1 children: {0}.".format(combined_path))
+        for children_level2 in zk_client.get_children(combined_path):
+            logger.info('Children level-2: {0}'.format(children_level2))
+
+
+def validate_standalone_job():
     """
     Validates that negate-number negated all messages, and sent the output to
     samza-test-topic-output.
