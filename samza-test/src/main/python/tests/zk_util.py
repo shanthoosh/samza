@@ -91,9 +91,9 @@ def get_latest_job_model(zk_base_dir):
         first_curly_index = job_model.find('{')
         job_model = job_model[first_curly_index: ]
 
-        logger.info('Retrieved job model.')
-        logger.info(job_model)
         job_model_dict = json.loads(job_model)
+        logger.info('Retrieved job model.')
+        logger.info(job_model_dict)
         return job_model_dict
     finally:
         if zk_client is not None:

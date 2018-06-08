@@ -87,6 +87,8 @@ def test_kill_current_master():
 
         job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
 
+        logger.info('JobModel dict received: {0}'.format(job_model))
+
         assert 2 == len(job_model['containers']), 'Expected processor count: {0}, actual processor count: {1}.'.format(2, len(job_model['containers']))
 
         for processor_id, processor in processors:
