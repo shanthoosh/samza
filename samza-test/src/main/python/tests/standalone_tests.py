@@ -47,31 +47,10 @@ TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 NUM_MESSAGES = 50
 JOB_MODEL_TIMEOUT = 20
 
-def test_samza_job():
-    """
-    Runs a job that reads converts input strings to integers, negates the
-    integer, and outputs to a Kafka topic.
-    """
-    _load_data()
-
-    job_model_dict = zk_util.get_latest_job_model(ZK_BASE_DIR)
-
-    logger.info("Job model dict: {0}".format(job_model_dict))
-
-    deployer_name_to_config = {
-        'standalone-processor-1' : 'config/standalone.failure.test-processor-1.properties',
-        'standalone-processor-2' : 'config/standalone.failure.test-processor-2.properties',
-        'standalone-processor-3' : 'config/standalone.failure.test-processor-3.properties'
-    }
-
-    for deployer in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-        config_file = deployer_name_to_config[deployer]
-        logger.info(deployer)
-        logger.info(config_file)
-
 def test_kill_current_master():
     try:
         logger.info("Executing kill current master test!")
+        _load_data()
         processors = {}
         for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
             processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
@@ -90,10 +69,13 @@ def test_kill_current_master():
         logger.info('JobModel dict received: {0}'.format(job_model))
 
         containers = job_model['containers']
-        logger.info('Containers: {0}.'.format(containers))
-        num_processors = len(containers)
 
-        assert(2 == num_processors, 'Expected processor count: {0}, actual processor count: {1}.'.format(2, num_processors))
+        logger.info('Containers: {0}.'.format(containers))
+
+        for processor_id, deployer in processors:
+            logger.info('Checking: {0} for processor_id: {1}.'.format(containers, processor_id))
+            if processor_id is not leader_processor_id:
+                assert(processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id))
 
         for processor_id, processor in processors:
             logger.info("Killing processor: {0}.".format(processor_id))
