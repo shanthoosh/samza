@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 ##
 class StandaloneApplicationDeployer():
 
-    def __init__(self, processor_id, package_id, configs):
+    def __init__(self, processor_id, package_id, configs={}):
         self.username = runtime.get_username()
         self.password = runtime.get_password()
         self.processor_id = processor_id
@@ -85,24 +85,24 @@ class StandaloneApplicationDeployer():
     ## TODO: Add docs.
     ##
     def kill(self):
-        self.__do_send_signal("kill", "SIGKILL")
+        self.__send_signal_to_processor("kill", "SIGKILL")
 
     ##
     ## TODO: Add docs.
     ##
     def pause(self):
-        self.__do_send_signal("pause", "SIGSTOP")
+        self.__send_signal_to_processor("pause", "SIGSTOP")
 
     ##
     ## TODO: Add docs.
     ##
     def resume(self):
-        self.__do_send_signal("resume", "CONT")
+        self.__send_signal_to_processor("resume", "CONT")
 
     ##
     ## TODO: Add docs.
     ##
-    def __do_send_signal(self, command_type, signal):
+    def __send_signal_to_processor(self, command_type, signal):
         command = "kill -{0} {1}".format(signal, self.processor_id)
         result = self.__execute_command(command)
         logger.info("Result of {0} command: {1} is: {2}.".format(command_type, command, result))

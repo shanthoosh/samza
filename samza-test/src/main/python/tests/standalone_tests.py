@@ -32,6 +32,7 @@ import json
 import zopkio.constants as constants
 from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
+from standalone_application_deployer import StandaloneApplicationDeployer
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ def resume_process(pid):
 def _load_data():
 
     processor_ids = ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']
-
+    standalone_application_deployers = []
     try:
        logger.info("load-data")
 
