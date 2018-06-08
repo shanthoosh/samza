@@ -73,9 +73,9 @@ def get_job_model(jm_version):
     job_model_generation_path = '{0}/JobModelGeneration/jobModels/{1}'.format(ZK_BASE_DIR, jm_version)
     job_model, _ = zk_client.get(job_model_generation_path)
 
-    ### Dirty hack: Inbuilt data serializers in ZkClient persist data in zookeeper data node of following format:
-    ### class_name, length, json_data.
-    # Primitive json deserialization without this custom string massaging fails.
+    ### Dirty hack: Inbuilt data serializers in ZkClient persist data in the following format in zookeeper data node:
+    ### class_name, length, actual_data.
+    # Primitive json deserialization without this custom string massaging fails.  After SAMZA-
     first_curly_index = job_model.find('{')
     job_model = job_model[first_curly_index: ]
 
