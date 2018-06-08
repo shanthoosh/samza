@@ -89,7 +89,11 @@ def test_kill_current_master():
 
         logger.info('JobModel dict received: {0}'.format(job_model))
 
-        assert 2 == len(job_model['containers']), 'Expected processor count: {0}, actual processor count: {1}.'.format(2, len(job_model['containers']))
+        containers = job_model['containers']
+        logger.info('Containers: {0}.'.format(containers))
+        num_processors = len(containers)
+
+        assert(2 == num_processors, 'Expected processor count: {0}, actual processor count: {1}.'.format(2, num_processors))
 
         for processor_id, processor in processors:
             logger.info("Killing processor: {0}.".format(processor_id))
