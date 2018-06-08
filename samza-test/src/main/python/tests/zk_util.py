@@ -121,14 +121,17 @@ def validate_output_stream(topic_name, expected_message_count):
 def get_leader_processor_id(zk_base_dir):
     zk_client = None
     try:
+        logger.info("Executing get_leader_processor_id: {0}.".format(zk_base_dir))
         zk_client = KazooClient(hosts='127.0.0.1:2181')
         zk_client.start()
         processors_path =  '{0}/processors'.format(zk_base_dir)
 
         logger.info("Invoking getChildren on path: {0}".format(processors_path))
 
+        childZkNodes = zk_client.get_children(processors_path)
+        logger.info("ChildZNodes of parent path: {0} is {1}.".format(processors_path, childZkNodes))
         processor_ids = []
-        for childZkNode in zk_client.get_children(processors_path):
+        for childZkNode in childZkNodes:
             child_processor_path = '{0}/{1}'.format(processors_path, childZkNode)
             logger.info("Invoking getData on path: {0}".format(child_processor_path))
             processor_data, _ = zk_client.get(child_processor_path)

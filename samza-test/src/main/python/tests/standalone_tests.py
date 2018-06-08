@@ -70,29 +70,32 @@ def test_samza_job():
         logger.info(config_file)
 
 def test_kill_current_master():
-    logger.info("Executing kill current master test!")
-    processors = {}
-    for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-        processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
-        processors[processor_id].deploy()
+    try:
+        logger.info("Executing kill current master test!")
+        processors = {}
+        for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
+            processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
+            processors[processor_id].deploy()
 
-    version = zk_util.get_job_model_version(zk_base_dir=ZK_BASE_DIR)
+        version = zk_util.get_job_model_version(zk_base_dir=ZK_BASE_DIR)
 
-    leader_processor_id = zk_util.get_leader_processor_id()
-    leader_processor = processors[leader_processor_id]
+        leader_processor_id = zk_util.get_leader_processor_id()
+        leader_processor = processors[leader_processor_id]
 
-    leader_processor.kill()
+        leader_processor.kill()
 
-    ## Wait for new JobModel to be published.
-    time.sleep(JOB_MODEL_TIMEOUT)
+        ## Wait for new JobModel to be published.
+        time.sleep(JOB_MODEL_TIMEOUT)
 
-    job_model = zk_util.get_job_model(zk_base_dir=ZK_BASE_DIR, jm_version=version+1)
+        job_model = zk_util.get_job_model(zk_base_dir=ZK_BASE_DIR, jm_version=version+1)
 
-    assert 2 == len(job_model['containers']), 'Expected processor count: {0}, actual processor count: {1}.'.format(2, len(job_model['containers']))
+        assert 2 == len(job_model['containers']), 'Expected processor count: {0}, actual processor count: {1}.'.format(2, len(job_model['containers']))
 
-    for processor_id, processor in processors:
-        logger.info("Killing processor: {0}.".format(processor_id))
-        processor.kill()
+        for processor_id, processor in processors:
+            logger.info("Killing processor: {0}.".format(processor_id))
+            processor.kill()
+    finally:
+        logger.error(traceback.format_exc(sys.exc_info()))
 
 def _load_data():
 
