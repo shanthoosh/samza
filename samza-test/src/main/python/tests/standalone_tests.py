@@ -73,7 +73,7 @@ def test_kill_master():
 
         for processor_id, deployer in processors.iteritems():
             logger.info('Checking: {0} for processor_id: {1}.'.format(containers, processor_id))
-            assert(processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id))
+            assert processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id)
 
         for processor_id, processor in processors.iteritems():
             logger.info("Killing processor: {0}.".format(processor_id))
@@ -109,7 +109,7 @@ def test_kill_single_worker():
 
         for processor_id, deployer in processors.iteritems():
             logger.info('Checking: {0} for processor_id: {1}.'.format(containers, processor_id))
-            assert(processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id))
+            assert processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id)
 
         for processor_id, processor in processors.iteritems():
             logger.info("Killing processor: {0}.".format(processor_id))
@@ -145,7 +145,7 @@ def test_kill_multiple_workers():
         for processor_id, deployer in processors.iteritems():
             logger.info('Checking: {0} for processor_id: {1}.'.format(containers, processor_id))
             if processor_id != leader_processor_id:
-                assert(processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id))
+                assert processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id)
 
         for processor_id, processor in processors.iteritems():
             logger.info("Killing processor: {0}.".format(processor_id))
@@ -182,7 +182,7 @@ def test_kill_leader_and_follower():
 
         logger.info('Containers: {0}.'.format(containers))
 
-        assert(leader_processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(leader_processor_id))
+        assert leader_processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(leader_processor_id)
 
         for processor_id, processor in processors.iteritems():
             logger.info("Killing processor: {0}.".format(processor_id))
