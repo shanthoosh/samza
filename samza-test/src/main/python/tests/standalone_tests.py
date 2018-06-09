@@ -177,9 +177,9 @@ def test_pause_resume_master():
 
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
 
-
-    for processor_id, deployer in processors.iteritems():
+        for processor_id, deployer in processors.iteritems():
             assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
+
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
