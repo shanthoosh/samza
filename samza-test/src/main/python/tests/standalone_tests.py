@@ -42,26 +42,43 @@ from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import ParamikoError, better_exec_command, get_ssh_client, copy_dir, get_sftp_client
 
 logger = logging.getLogger(__name__)
-APP_NAME = 'test-app-name'
-APP_ID = 'test-app-id'
-ZK_BASE_DIR='app-{0}-{1}/{2}-{3}-coordinationData'.format(APP_NAME, APP_ID, APP_NAME, APP_ID)
 NUM_MESSAGES = 50
 GROUP_COORDINATION_TIMEOUT_MS = 10
-TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 zk_client = None
 
+## TODO: Add docs.
+def validate_output_stream(topic_name, expected_message_count):
+    """
+    Validates that presence of {expected_message_count} messages in topic_name.
+    """
+    kafka_client = None
+    try:
+        logger.info('Running validate_output_stream')
+        kafka_client = util.get_kafka_client()
+        consumer = SimpleConsumer(kafka_client, 'samza-test-group', topic_name)
+        logger.info("Reading messages from topic: {0}.".format(topic_name))
+        messages = consumer.get_messages(count=expected_message_count, block=True, timeout=300)
+        actual_message_count = len(messages)
+        logger.info("Messages read count: {0}.".format(actual_message_count))
+        assert expected_message_count == actual_message_count, 'Expected messages: {0}, actual messages: {1}.'.format(expected_message_count, actual_message_count)
+    finally:
+        if kafka_client is not None:
+            kafka_client.close()
+
+## TODO: Add docs.
 def __load_data():
     kafka = None
+    input_topic = 'standaloneIntegrationTestKafkaInputTopic'
     try:
         logger.info("load-data")
         kafka = util.get_kafka_client()
-        kafka.ensure_topic_exists(TEST_INPUT_TOPIC)
+        kafka.ensure_topic_exists(input_topic)
         producer = SimpleProducer(kafka, async=False, req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT, ack_timeout=30000)
         NUM_MESSAGES = 50
         for message_index in range(1, NUM_MESSAGES + 1):
-            logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
-            producer.send_messages(TEST_INPUT_TOPIC, str(message_index))
+            logger.info('Publishing message to topic: {0}'.format(input_topic))
+            producer.send_messages(input_topic, str(message_index))
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
     finally:
@@ -82,7 +99,7 @@ def __kill_all(processors):
 
 def __setup_zk_client():
     global zk_client
-    zk_client = ZkClient(APP_NAME, APP_ID)
+    zk_client = ZkClient('test-app-name', 'test-app-id')
     zk_client.start()
 
 def __teardown_zk_client():

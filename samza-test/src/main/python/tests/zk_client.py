@@ -133,23 +133,3 @@ class ZkClient():
         except:
             logger.error(traceback.format_exc(sys.exc_info()))
 
-# ##
-# ## TODO: Add docs.
-# ##
-# def validate_output_stream(topic_name, expected_message_count):
-#     """
-#     Validates that presence of {expected_message_count} messages in topic_name.
-#     """
-#     kafka_client = None
-#     try:
-#         logger.info('Running validate_output_stream')
-#         kafka_client = util.get_kafka_client()
-#         consumer = SimpleConsumer(kafka_client, 'samza-test-group', topic_name)
-#         logger.info("Reading messages from topic: {0}.".format(topic_name))
-#         messages = consumer.get_messages(count=expected_message_count, block=True, timeout=300)
-#         actual_message_count = len(messages)
-#         logger.info("Messages read count: {0}.".format(actual_message_count))
-#         assert expected_message_count == actual_message_count, 'Expected messages: {0}, actual messages: {1}.'.format(expected_message_count, actual_message_count)
-#     finally:
-#         if kafka_client is not None:
-#             kafka_client.close()
