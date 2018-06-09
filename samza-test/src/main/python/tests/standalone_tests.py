@@ -48,25 +48,40 @@ NUM_MESSAGES = 50
 JOB_MODEL_TIMEOUT = 6
 processors = {}
 
+def _load_data():
+    kafka = None
+    try:
+        logger.info("load-data")
+        kafka = util.get_kafka_client()
+        kafka.ensure_topic_exists(TEST_INPUT_TOPIC)
+        producer = SimpleProducer(
+            kafka,
+            async=False,
+            req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT,
+            ack_timeout=30000)
+        for i in range(1, NUM_MESSAGES + 1):
+            logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
+            producer.send_messages(TEST_INPUT_TOPIC, str(i))
+    except:
+        logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        if kafka is not None:
+            kafka.close()
 
 def setup():
     global processors
-
     _load_data()
-
     processors = {}
-
     for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
         processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
         processors[processor_id].deploy()
-
 
 def teardown():
     global processors
 
     for processor_id, processor in processors.iteritems():
         logger.info("Killing processor: {0}.".format(processor_id))
-    processor.kill()
+        processor.kill()
 
 def test_kill_master():
     try:
@@ -126,23 +141,3 @@ def test_kill_leader_and_follower():
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
     finally:
         logger.error(traceback.format_exc(sys.exc_info()))
-
-def _load_data():
-    kafka = None
-    try:
-       logger.info("load-data")
-       kafka = util.get_kafka_client()
-       kafka.ensure_topic_exists(TEST_INPUT_TOPIC)
-       producer = SimpleProducer(
-           kafka,
-           async=False,
-           req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT,
-           ack_timeout=30000)
-       for i in range(1, NUM_MESSAGES + 1):
-           logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
-           producer.send_messages(TEST_INPUT_TOPIC, str(i))
-    except:
-       logger.error(traceback.format_exc(sys.exc_info()))
-    finally:
-        if kafka is not None:
-            kafka.close()
