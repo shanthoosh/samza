@@ -138,9 +138,6 @@ def setup():
     _create_kafka_topic('localhost:2181', TEST_INPUT_TOPIC, 3, 1)
     _create_kafka_topic('localhost:2181', TEST_OUTPUT_TOPIC, 3, 1)
 
-    ## Ingest test data into the topic.
-    _load_data()
-
 def teardown():
     for topic in [TEST_INPUT_TOPIC, TEST_OUTPUT_TOPIC]:
         logger.info("Deleting topic: {0}.".format(topic))
