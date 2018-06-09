@@ -90,7 +90,7 @@ def __teardown_zk_client():
 
 def test_kill_master():
     try:
-        zk_client = __setup_zk_client()
+        __setup_zk_client()
         processors = __create_processors()
         __load_data()
         leader_processor_id = zk_client.get_leader_processor_id()
@@ -110,7 +110,7 @@ def test_kill_master():
 
 def test_kill_single_worker():
     try:
-        zk_client = __setup_zk_client()
+        __setup_zk_client()
         processors = __create_processors()
         __load_data()
         leader_processor_id = zk_client.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
@@ -131,7 +131,7 @@ def test_kill_single_worker():
 
 def test_kill_multiple_workers():
     try:
-        zk_client = __setup_zk_client()
+        __setup_zk_client()
         processors = __create_processors()
         __load_data()
         leader_processor_id = zk_client.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
@@ -151,7 +151,7 @@ def test_kill_multiple_workers():
 
 def test_kill_leader_and_follower():
     try:
-        zk_client = __setup_zk_client()
+        __setup_zk_client()
         processors = __create_processors()
         __load_data()
         leader_processor_id = zk_client.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
@@ -172,7 +172,7 @@ def test_kill_leader_and_follower():
 
 def test_pause_resume_master():
     try:
-        zk_client = __setup_zk_client()
+        __setup_zk_client()
         processors = __create_processors()
         __load_data()
 
