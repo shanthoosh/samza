@@ -42,12 +42,12 @@ class StandaloneProcessor:
         })
 
     ## TODO: Add docs.
-    def deploy(self):
+    def deploy(self, deploy_wait_time = 5):
         logger.info("Deploying processor with id: {0}.".format(self.processor_id))
         for instance, host in runtime.get_active_config(self.processor_id + '_hosts').iteritems():
             logger.info('Deploying {0} on host: {1}'.format(instance, host))
             self.deployer.deploy(instance, {'hostname': host})
-            time.sleep(5)
+            time.sleep(deploy_wait_time)
 
     ## TODO: Add docs.
     def stop(self):

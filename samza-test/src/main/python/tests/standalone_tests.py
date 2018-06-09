@@ -68,11 +68,11 @@ def __load_data():
         if kafka_client is not None:
             kafka_client.close()
 
-def __create_processors():
+def __create_processors(deploy_wait_time = 5):
     processors = {}
     for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
         processors[processor_id] = StandaloneProcessor(processor_id=processor_id)
-        processors[processor_id].deploy()
+        processors[processor_id].deploy(deploy_wait_time = deploy_wait_time)
     return processors
 
 def __kill_all(processors):
@@ -199,6 +199,47 @@ def test_pause_resume_master():
 
         logger.info("Waiting for group coordination timeout: {0}".format(GROUP_COORDINATION_TIMEOUT_MS))
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
+
+        job_model = zk_client.get_latest_job_model()
+
+        assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(leader_processor_id, job_model['containers'])
+
+        for processor_id, deployer in processors.iteritems():
+            assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(processor_id, job_model['containers'])
+
+        __kill_all(processors)
+    except:
+        logger.error(traceback.format_exc(sys.exc_info()))
+        raise
+    finally:
+        __teardown_zk_client()
+
+def test_pause_master_during_barrier_phase():
+    debounce_time_out_ms = 5
+    try:
+        __setup_zk_client()
+        processors = __create_processors(deploy_wait_time=0)
+        __load_data()
+
+        leader_processor_id = zk_client.get_leader_processor_id()
+        leader = processors.pop(leader_processor_id)
+
+        logger.info("Pausing the leader processor: {0}.".format(leader_processor_id))
+        leader.pause()
+
+        logger.info("Waiting for debounce timeout: {0}".format(GROUP_COORDINATION_TIMEOUT_MS))
+        time.sleep(debounce_time_out_ms)
+
+        job_model = zk_client.get_latest_job_model()
+        for processor_id, deployer in processors.iteritems():
+            assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(processor_id, job_model['containers'])
+
+        logger.info("Resuming the leader processor: {0}.".format(leader_processor_id))
+
+        leader.resume()
+
+        logger.info("Waiting for group coordination timeout: {0}".format(GROUP_COORDINATION_TIMEOUT_MS))
+        time.sleep(debounce_time_out_ms)
 
         job_model = zk_client.get_latest_job_model()
 
