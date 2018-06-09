@@ -96,7 +96,7 @@ class StandaloneProcessor:
             chan = exec_with_env(ssh, command, msg="Failed to get PID", env={})
         execution_result = ''
         while True:
-            result_buffer = chan.recv(block_size=16)
+            result_buffer = chan.recv(16)
             if len(result_buffer) == 0:
                 break
             execution_result += result_buffer
