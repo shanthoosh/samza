@@ -145,5 +145,11 @@ class TestDeployer(unittest.TestCase):
         finally:
             logger.error(traceback.format_exc(sys.exc_info()))
 
+    def runTest(self):
+        self.test_kill_leader_and_follower()
+        self.test_kill_master()
+        self.test_kill_multiple_workers()
+        self.test_kill_single_worker()
+
 if __name__ == '__main__':
   unittest.main()
