@@ -45,13 +45,11 @@ logger = logging.getLogger(__name__)
 APP_NAME = 'test-app-name'
 APP_ID = 'test-app-id'
 ZK_BASE_DIR='app-{0}-{1}/{2}-{3}-coordinationData'.format(APP_NAME, APP_ID, APP_NAME, APP_ID)
-PACKAGE_ID = 'tests'
 NUM_MESSAGES = 50
 GROUP_COORDINATION_TIMEOUT_MS = 10
 TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 zk_client = None
-
 
 def __load_data():
     kafka = None
@@ -73,7 +71,7 @@ def __load_data():
 def __create_processors():
     processors = {}
     for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-        processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
+        processors[processor_id] = StandaloneProcessor(processor_id=processor_id)
         processors[processor_id].deploy()
     return processors
 

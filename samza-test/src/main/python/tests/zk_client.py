@@ -46,9 +46,7 @@ import json
 
 logger = logging.getLogger(__name__)
 
-##
 ## TODO: Add docs.
-##
 class ZkClient():
 
     def __init__(self, app_name, app_id):
@@ -61,9 +59,7 @@ class ZkClient():
     def stop(self):
         self.zk_client.stop()
 
-    ##
     ## TODO: Add docs.
-    ##
     def get_job_model_version(self):
         try:
             job_model_version_path = '{0}/JobModelGeneration/jobModelVersion'.format(self.zk_base_dir)
@@ -73,9 +69,7 @@ class ZkClient():
         except:
             logger.error(traceback.format_exc(sys.exc_info()))
 
-    ##
     ## TODO: Add docs.
-    ##
     def get_latest_job_model(self):
         try:
             childZkNodes = self.zk_client.get_children('{0}/JobModelGeneration/jobModels/'.format(self.zk_base_dir))
@@ -100,9 +94,7 @@ class ZkClient():
         except:
             logger.error(traceback.format_exc(sys.exc_info()))
 
-    ##
     ## TODO: Add docs.
-    ##
     def get_all_processors(self):
         try:
             logger.info("Executing get_leader_processor_id: {0}.".format(self.zk_base_dir))
@@ -124,9 +116,7 @@ class ZkClient():
         except:
             logger.error(traceback.format_exc(sys.exc_info()))
 
-    ##
     ## TODO: Add docs.
-    ##
     def get_leader_processor_id(self):
         try:
             processors_path =  '{0}/processors'.format(self.zk_base_dir)
@@ -138,7 +128,6 @@ class ZkClient():
             return processor_id
         except:
             logger.error(traceback.format_exc(sys.exc_info()))
-
 
 # ##
 # ## TODO: Add docs.
