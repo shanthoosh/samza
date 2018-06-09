@@ -40,7 +40,6 @@ import zopkio.constants as constants
 from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
 from standalone_processor import StandaloneProcessor
-import zk_util
 import os
 import shutil
 import unittest
