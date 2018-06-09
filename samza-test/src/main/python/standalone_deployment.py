@@ -23,7 +23,6 @@ import zopkio.runtime as runtime
 import zopkio.adhoc_deployer as adhoc_deployer
 from zopkio.runtime import get_active_config as c
 from subprocess import PIPE, Popen
-import util
 import sys
 import logging
 import zopkio.runtime as runtime
