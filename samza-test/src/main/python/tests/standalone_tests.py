@@ -46,147 +46,84 @@ TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 NUM_MESSAGES = 50
 JOB_MODEL_TIMEOUT = 6
+processors = {}
+
+
+def setup():
+    global processors
+
+    _load_data()
+
+    processors = {}
+
+    for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
+        processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
+        processors[processor_id].deploy()
+
+
+def teardown():
+    global processors
+
+    for processor_id, processor in processors.iteritems():
+        logger.info("Killing processor: {0}.".format(processor_id))
+    processor.kill()
 
 def test_kill_master():
     try:
-        logger.info("Executing kill current master test!")
-        _load_data()
-        processors = {}
-        for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-            processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
-            processors[processor_id].deploy()
-
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
-        leader_processor = processors.pop(leader_processor_id)
-        leader_processor.kill()
+        processors.pop(leader_processor_id).kill()
 
-        ## Wait for new JobModel to be published.
         time.sleep(JOB_MODEL_TIMEOUT)
 
         job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
 
-        logger.info('JobModel dict received: {0}'.format(job_model))
-
-        containers = job_model['containers']
-
-        logger.info('Containers: {0}.'.format(containers))
-
         for processor_id, deployer in processors.iteritems():
-            logger.info('Checking: {0} for processor_id: {1}.'.format(containers, processor_id))
-            assert processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id)
-
-        for processor_id, processor in processors.iteritems():
-            logger.info("Killing processor: {0}.".format(processor_id))
-            processor.kill()
+            assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
     finally:
         logger.error(traceback.format_exc(sys.exc_info()))
 
 def test_kill_single_worker():
     try:
-        logger.info("Executing kill single worker test!")
-        _load_data()
-        processors = {}
-        for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-            processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
-            processors[processor_id].deploy()
-
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         for processor_id, deployer in processors.iteritems():
             if processor_id != leader_processor_id:
-                logger.info('Killing processor_id: {0}.'.format(processor_id))
-                follower = processors.pop(processor_id)
-                follower.kill()
+                processors.pop(processor_id).kill()
                 break
 
-        ## Wait for new JobModel to be published.
         time.sleep(JOB_MODEL_TIMEOUT)
-
         job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
-        logger.info('JobModel dict received: {0}'.format(job_model))
-        containers = job_model['containers']
-
-        logger.info('Containers: {0}.'.format(containers))
-
         for processor_id, deployer in processors.iteritems():
-            logger.info('Checking: {0} for processor_id: {1}.'.format(containers, processor_id))
-            assert processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id)
-
-        for processor_id, processor in processors.iteritems():
-            logger.info("Killing processor: {0}.".format(processor_id))
-            processor.kill()
+            assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
     finally:
         logger.error(traceback.format_exc(sys.exc_info()))
 
 def test_kill_multiple_workers():
     try:
-        logger.info("Executing kill multiple workers test!")
-        _load_data()
-        processors = {}
-        for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-            processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
-            processors[processor_id].deploy()
-
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         for processor_id in processors.keys():
             if processor_id != leader_processor_id:
-                logger.info('Killing processor_id: {0}.'.format(processor_id))
                 follower = processors.pop(processor_id)
                 follower.kill()
 
-        ## Wait for new JobModel to be published.
         time.sleep(JOB_MODEL_TIMEOUT)
-
         job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
-        logger.info('JobModel dict received: {0}'.format(job_model))
-        containers = job_model['containers']
-
-        logger.info('Containers: {0}.'.format(containers))
-
-        for processor_id, deployer in processors.iteritems():
-            logger.info('Checking: {0} for processor_id: {1}.'.format(containers, processor_id))
-            if processor_id != leader_processor_id:
-                assert processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id)
-
-        for processor_id, processor in processors.iteritems():
-            logger.info("Killing processor: {0}.".format(processor_id))
-            processor.kill()
+        assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
     finally:
         logger.error(traceback.format_exc(sys.exc_info()))
 
 def test_kill_leader_and_follower():
     try:
-        logger.info("Executing kill leader and follower test!")
-        _load_data()
-        processors = {}
-        for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
-            processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
-            processors[processor_id].deploy()
 
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
-        for processor_id, deployer in processors.iteritems():
-            if processor_id != leader_processor_id:
-                logger.info('Killing processor_id: {0}.'.format(processor_id))
-                follower = processors.pop(processor_id)
-                follower.kill()
-                break
+        processors.pop(leader_processor_id).kill()
 
-        leader_processor = processors.pop(leader_processor_id)
-        leader_processor.kill()
+        for processor_id in processors.keys():
+            processors.pop(processor_id).kill()
+            break
 
-        ## Wait for new JobModel to be published.
         time.sleep(JOB_MODEL_TIMEOUT)
-
         job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
-        logger.info('JobModel dict received: {0}'.format(job_model))
-        containers = job_model['containers']
-
-        logger.info('Containers: {0}.'.format(containers))
-
-        assert leader_processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(leader_processor_id)
-
-        for processor_id, processor in processors.iteritems():
-            logger.info("Killing processor: {0}.".format(processor_id))
-            processor.kill()
+        assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
     finally:
         logger.error(traceback.format_exc(sys.exc_info()))
 
