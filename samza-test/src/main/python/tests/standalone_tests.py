@@ -18,28 +18,11 @@
 import util
 import sys
 import logging
-import zopkio.runtime as runtime
 from kafka import SimpleProducer, SimpleConsumer
-import struct
-import os
 import time
-import zipfile
-import urllib
 import traceback
-from subprocess import call
-from kazoo.client import KazooClient
-import json
-import zopkio.constants as constants
-from zopkio.deployer import Deployer, Process
-from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
 from standalone_processor import StandaloneProcessor
 from zk_client import ZkClient
-import os
-import shutil
-import unittest
-
-from zopkio.deployer import Deployer, Process
-from zopkio.remote_host_helper import ParamikoError, better_exec_command, get_ssh_client, copy_dir, get_sftp_client
 
 logger = logging.getLogger(__name__)
 NUM_MESSAGES = 50
@@ -48,7 +31,7 @@ TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 zk_client = None
 
 ## TODO: Add docs.
-def validate_output_stream(topic_name, expected_message_count):
+def __validate_output_topic(topic_name, expected_message_count):
     """
     Validates that presence of {expected_message_count} messages in topic_name.
     """
@@ -68,13 +51,13 @@ def validate_output_stream(topic_name, expected_message_count):
 
 ## TODO: Add docs.
 def __load_data():
-    kafka = None
+    kafka_client = None
     input_topic = 'standaloneIntegrationTestKafkaInputTopic'
     try:
         logger.info("load-data")
-        kafka = util.get_kafka_client()
-        kafka.ensure_topic_exists(input_topic)
-        producer = SimpleProducer(kafka, async=False, req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT, ack_timeout=30000)
+        kafka_client = util.get_kafka_client()
+        kafka_client.ensure_topic_exists(input_topic)
+        producer = SimpleProducer(kafka_client, async=False, req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT, ack_timeout=30000)
         NUM_MESSAGES = 50
         for message_index in range(1, NUM_MESSAGES + 1):
             logger.info('Publishing message to topic: {0}'.format(input_topic))
@@ -82,8 +65,8 @@ def __load_data():
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
     finally:
-        if kafka is not None:
-            kafka.close()
+        if kafka_client is not None:
+            kafka_client.close()
 
 def __create_processors():
     processors = {}
@@ -209,10 +192,11 @@ def test_pause_resume_master():
         logger.info("Resuming the leader processor: {0}.".format(leader_processor_id))
 
         leader.resume()
+
         logger.info("Waiting for group coordination timeout: {0}".format(GROUP_COORDINATION_TIMEOUT_MS))
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
-        job_model = zk_client.get_latest_job_model()
 
+        job_model = zk_client.get_latest_job_model()
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(leader_processor_id, job_model['containers'])
 
         for processor_id, deployer in processors.iteritems():
