@@ -45,7 +45,7 @@ import zopkio.adhoc_deployer as adhoc_deployer
 logger = logging.getLogger(__name__)
 
 ## TODO: Add class level docs.
-class StandaloneProcessor():
+class StandaloneProcessor:
 
     def __init__(self, processor_id):
         self.username = runtime.get_username()

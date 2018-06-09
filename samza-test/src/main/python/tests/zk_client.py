@@ -47,7 +47,7 @@ import json
 logger = logging.getLogger(__name__)
 
 ## TODO: Add docs.
-class ZkClient():
+class ZkClient:
 
     ## TODO: Add docs.
     def __init__(self, app_name, app_id):
