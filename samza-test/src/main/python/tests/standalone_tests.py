@@ -47,7 +47,7 @@ APP_ID = 'test-app-id'
 ZK_BASE_DIR='app-{0}-{1}/{2}-{3}-coordinationData'.format(APP_NAME, APP_ID, APP_NAME, APP_ID)
 PACKAGE_ID = 'tests'
 NUM_MESSAGES = 50
-GROUP_COORDINATION_TIMEOUT_MS = 6
+GROUP_COORDINATION_TIMEOUT_MS = 10
 TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 
