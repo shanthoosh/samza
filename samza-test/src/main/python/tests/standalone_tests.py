@@ -48,22 +48,42 @@ ZK_BASE_DIR='app-{0}-{1}/{2}-{3}-coordinationData'.format(APP_NAME, APP_ID, APP_
 PACKAGE_ID = 'tests'
 NUM_MESSAGES = 50
 JOB_MODEL_TIMEOUT = 6
+TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
+TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 
-def create_processors():
+def __load_data():
+    kafka = None
+    try:
+        logger.info("load-data")
+        kafka = util.get_kafka_client()
+        kafka.ensure_topic_exists(TEST_INPUT_TOPIC)
+        producer = SimpleProducer(kafka, async=False, req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT, ack_timeout=30000)
+        NUM_MESSAGES = 50
+        for message_index in range(1, NUM_MESSAGES + 1):
+            logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
+            producer.send_messages(TEST_INPUT_TOPIC, str(message_index))
+    except:
+        logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        if kafka is not None:
+            kafka.close()
+
+def __create_processors():
     processors = {}
     for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
         processors[processor_id] = StandaloneProcessor(processor_id=processor_id, package_id=PACKAGE_ID, configs={})
         processors[processor_id].deploy()
     return processors
 
-def kill_all(processors):
+def __kill_all(processors):
     for processor_id, processor in processors.iteritems():
         logger.info("Killing processor: {0}.".format(processor_id))
         processor.kill()
 
 def test_kill_master():
     try:
-        processors = create_processors()
+        processors = __create_processors()
+        __load_data()
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         processors.pop(leader_processor_id).kill()
 
@@ -73,13 +93,14 @@ def test_kill_master():
 
         for processor_id, deployer in processors.iteritems():
             assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
-        kill_all(processors)
+        __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
 
 def test_kill_single_worker():
     try:
-        processors = create_processors()
+        processors = __create_processors()
+        __load_data()
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         for processor_id, deployer in processors.iteritems():
             if processor_id != leader_processor_id:
@@ -90,13 +111,14 @@ def test_kill_single_worker():
         job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
         for processor_id, deployer in processors.iteritems():
             assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
-        kill_all(processors)
+        __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
 
 def test_kill_multiple_workers():
     try:
-        processors = create_processors()
+        processors = __create_processors()
+        __load_data()
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         for processor_id in processors.keys():
             if processor_id != leader_processor_id:
@@ -106,13 +128,14 @@ def test_kill_multiple_workers():
         time.sleep(JOB_MODEL_TIMEOUT)
         job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
-        kill_all(processors)
+        __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
 
 def test_kill_leader_and_follower():
     try:
-        processors = create_processors()
+        processors = __create_processors()
+        __load_data()
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         processors.pop(leader_processor_id).kill()
 
@@ -123,6 +146,6 @@ def test_kill_leader_and_follower():
         time.sleep(JOB_MODEL_TIMEOUT)
         job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
-        kill_all(processors)
+        __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
