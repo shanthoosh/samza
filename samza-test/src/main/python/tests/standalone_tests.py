@@ -104,6 +104,7 @@ def test_kill_master():
             assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
         __kill_all(processors)
     except:
+        ## Logging here before raising, since zopkio does not log entire stacktrace.
         logger.error(traceback.format_exc(sys.exc_info()))
         raise
     finally:
@@ -126,6 +127,7 @@ def test_kill_single_worker():
             assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
         __kill_all(processors)
     except:
+        ## Logging here before raising, since zopkio does not log entire stacktrace.
         logger.error(traceback.format_exc(sys.exc_info()))
         raise
     finally:
@@ -147,6 +149,7 @@ def test_kill_multiple_workers():
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
         __kill_all(processors)
     except:
+        ## Logging here before raising, since zopkio does not log entire stacktrace.
         logger.error(traceback.format_exc(sys.exc_info()))
         raise
     finally:
@@ -169,6 +172,7 @@ def test_kill_leader_and_follower():
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
         __kill_all(processors)
     except:
+        ## Logging here before raising, since zopkio does not log entire stacktrace.
         logger.error(traceback.format_exc(sys.exc_info()))
         raise
     finally:
@@ -209,6 +213,7 @@ def test_pause_resume_master():
 
         __kill_all(processors)
     except:
+        ## Logging here before raising, since zopkio does not log entire stacktrace.
         logger.error(traceback.format_exc(sys.exc_info()))
         raise
     finally:
@@ -250,6 +255,54 @@ def test_pause_master_during_barrier_phase():
 
         __kill_all(processors)
     except:
+        ## Logging here before raising, since zopkio does not log entire stacktrace.
+        logger.error(traceback.format_exc(sys.exc_info()))
+        raise
+    finally:
+        __teardown_zk_client()
+
+def test_pause_follower_during_barrier_phase():
+    debounce_time_out_ms = 5
+    try:
+        __setup_zk_client()
+        processors = __create_processors(deploy_wait_time=0)
+        __load_data()
+
+        leader_processor_id = zk_client.get_leader_processor_id()
+
+        follower = None
+        for processor_id, deployer in processors.iteritems():
+            if processor_id != leader_processor_id:
+                follower = processors.pop(processor_id)
+                break
+
+        logger.info("Pausing the leader processor: {0}.".format(leader_processor_id))
+        follower.pause()
+
+        logger.info("Waiting for debounce timeout: {0}".format(GROUP_COORDINATION_TIMEOUT_MS))
+        time.sleep(debounce_time_out_ms)
+
+        job_model = zk_client.get_latest_job_model()
+        for processor_id, deployer in processors.iteritems():
+            assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(processor_id, job_model['containers'])
+
+        logger.info("Resuming the leader processor: {0}.".format(leader_processor_id))
+
+        follower.resume()
+
+        logger.info("Waiting for group coordination timeout: {0}".format(GROUP_COORDINATION_TIMEOUT_MS))
+        time.sleep(debounce_time_out_ms)
+
+        job_model = zk_client.get_latest_job_model()
+
+        assert follower.get_processor_id() in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(follower.get_processor_id(), job_model['containers'])
+
+        for processor_id, deployer in processors.iteritems():
+            assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(processor_id, job_model['containers'])
+
+        __kill_all(processors)
+    except:
+        ## Logging here before raising, since zopkio does not log entire stacktrace.
         logger.error(traceback.format_exc(sys.exc_info()))
         raise
     finally:
