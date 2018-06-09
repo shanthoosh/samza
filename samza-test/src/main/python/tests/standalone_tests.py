@@ -83,7 +83,7 @@ def test_kill_master():
 
 def test_kill_single_worker():
     try:
-        logger.info("Executing kill current master test!")
+        logger.info("Executing kill single worker test!")
         _load_data()
         processors = {}
         for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
@@ -117,11 +117,9 @@ def test_kill_single_worker():
     finally:
         logger.error(traceback.format_exc(sys.exc_info()))
 
-
-
 def test_kill_multiple_workers():
     try:
-        logger.info("Executing kill current master test!")
+        logger.info("Executing kill multiple workers test!")
         _load_data()
         processors = {}
         for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
@@ -129,7 +127,7 @@ def test_kill_multiple_workers():
             processors[processor_id].deploy()
 
         leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
-        for processor_id, deployer in processors.iteritems():
+        for processor_id in processors.keys():
             if processor_id != leader_processor_id:
                 logger.info('Killing processor_id: {0}.'.format(processor_id))
                 follower = processors.pop(processor_id)
@@ -157,7 +155,7 @@ def test_kill_multiple_workers():
 
 def test_kill_leader_and_follower():
     try:
-        logger.info("Executing kill current master test!")
+        logger.info("Executing kill leader and follower test!")
         _load_data()
         processors = {}
         for processor_id in ['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3']:
