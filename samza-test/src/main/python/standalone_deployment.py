@@ -15,37 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import os
-import logging
-import urllib
-import time
-import zopkio.runtime as runtime
 import zopkio.adhoc_deployer as adhoc_deployer
 from zopkio.runtime import get_active_config as c
 from subprocess import PIPE, Popen
-import sys
 import logging
 import zopkio.runtime as runtime
-from kafka import SimpleProducer, SimpleConsumer
-import struct
-import os
 import time
-import zipfile
 import urllib
-import traceback
-from subprocess import call
-from kazoo.client import KazooClient
-import json
-import zopkio.constants as constants
-from zopkio.deployer import Deployer, Process
-from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
-from standalone_processor import StandaloneProcessor
 import os
-import shutil
-import unittest
-
-from zopkio.deployer import Deployer, Process
-from zopkio.remote_host_helper import ParamikoError, better_exec_command, get_ssh_client, copy_dir, get_sftp_client
 
 TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
@@ -114,7 +91,7 @@ def _delete_kafka_topic(zookeeper_servers, topic_name):
     output, err = p.communicate()
     logger.info("Output from delete kafka topic: {0}\nstdout: {1}\nstderr: {2}".format(topic_name, output, err))
 
-### Zopkio specific method that will be run once before all the integration tests.
+### Setup method that will be run by zopkio test_runner once before all the integration tests.
 def setup_suite():
 
     ## Download and deploy zk and kafka. Configuration for kafka, zookeeper are defined in kafka.json and zookeeper.json.
@@ -125,7 +102,7 @@ def setup_suite():
     ## Deploy the three standalone processors. Configurations for them are defined in standalone-processor-{id}.json.
     # _deploy_components(['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
 
-### Zopkio specific method that will be run once after all the integration tests.
+### Teardown method that will be run by zopkio test_runner once after all the integration tests.
 def teardown_suite():
     # Undeploy everything.
     for component in ['kafka', 'zookeeper']:
@@ -133,11 +110,13 @@ def teardown_suite():
         for instance, host in c(component + '_hosts').iteritems():
             deployer.undeploy(instance)
 
+### Setup method that will be run by zopkio test_runner once before each integration tests.
 def setup():
-    ## Create I/O kafka topics.
+    ## Create input and output topic.
     _create_kafka_topic('localhost:2181', TEST_INPUT_TOPIC, 3, 1)
     _create_kafka_topic('localhost:2181', TEST_OUTPUT_TOPIC, 3, 1)
 
+### Teardown method that will be run by zopkio test_runner once after each integration tests.
 def teardown():
     for topic in [TEST_INPUT_TOPIC, TEST_OUTPUT_TOPIC]:
         logger.info("Deleting topic: {0}.".format(topic))
