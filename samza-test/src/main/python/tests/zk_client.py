@@ -80,10 +80,11 @@ class ZkClient():
             job_model, _ = self.zk_client.get(job_model_generation_path)
 
             """ 
-            Inbuilt data serializers in ZkClient java library persist data in the following format in zookeeper data nodes:
+            ZkClient java library persist data in the following format in zookeeper:
                     class_name, data_length, actual_data
     
             JobModel json manipulation: Delete all the characters before first occurrence of '{' in jobModel json string.
+
             Primitive json deserialization fails without the above custom string massaging. This will be removed after SAMZA-1876.
             """
 
