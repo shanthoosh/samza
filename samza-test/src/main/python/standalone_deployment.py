@@ -23,9 +23,34 @@ import zopkio.runtime as runtime
 import zopkio.adhoc_deployer as adhoc_deployer
 from zopkio.runtime import get_active_config as c
 from subprocess import PIPE, Popen
+import util
+import sys
+import logging
+import zopkio.runtime as runtime
+from kafka import SimpleProducer, SimpleConsumer
+import struct
+import os
+import time
+import zipfile
+import urllib
+import traceback
+from subprocess import call
+from kazoo.client import KazooClient
+import json
+import zopkio.constants as constants
+from zopkio.deployer import Deployer, Process
+from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
+from standalone_processor import StandaloneProcessor
+import zk_util
+import os
+import shutil
+import unittest
 
-INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
-OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
+from zopkio.deployer import Deployer, Process
+from zopkio.remote_host_helper import ParamikoError, better_exec_command, get_ssh_client, copy_dir, get_sftp_client
+
+TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
+TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
 
 logger = logging.getLogger(__name__)
 deployers = {}
@@ -99,23 +124,43 @@ def setup_suite():
 
     _deploy_components(['zookeeper', 'kafka'])
 
-     ## Create I/O kafka topics.
-    _create_kafka_topic('localhost:2181', INPUT_TOPIC, 3, 1)
-
-    _create_kafka_topic('localhost:2181', OUTPUT_TOPIC, 3, 1)
-
     ## Deploy the three standalone processors. Configurations for them are defined in standalone-processor-{id}.json.
     # _deploy_components(['standalone-processor-1', 'standalone-processor-2', 'standalone-processor-3'])
 
 ### Zopkio specific method that will be run once after all the integration tests.
 def teardown_suite():
-
-    for topic in [INPUT_TOPIC, OUTPUT_TOPIC]:
-        logger.info("Deleting topic: {0}.".format(topic))
-        _delete_kafka_topic('localhost:2181', topic)
-
     # Undeploy everything.
     for component in ['kafka', 'zookeeper']:
         deployer = deployers[component]
         for instance, host in c(component + '_hosts').iteritems():
             deployer.undeploy(instance)
+
+def setup():
+    ## Create I/O kafka topics.
+    _create_kafka_topic('localhost:2181', TEST_INPUT_TOPIC, 3, 1)
+    _create_kafka_topic('localhost:2181', TEST_OUTPUT_TOPIC, 3, 1)
+
+    ## Ingest test data into the topic.
+    _load_data()
+
+def teardown():
+    for topic in [TEST_INPUT_TOPIC, TEST_OUTPUT_TOPIC]:
+        logger.info("Deleting topic: {0}.".format(topic))
+        _delete_kafka_topic('localhost:2181', topic)
+
+def _load_data():
+    kafka = None
+    try:
+        logger.info("load-data")
+        kafka = util.get_kafka_client()
+        kafka.ensure_topic_exists(TEST_INPUT_TOPIC)
+        producer = SimpleProducer(kafka, async=False, req_acks=SimpleProducer.ACK_AFTER_CLUSTER_COMMIT, ack_timeout=30000)
+        NUM_MESSAGES = 50
+        for message_index in range(1, NUM_MESSAGES + 1):
+            logger.info('Publishing message to topic: {0}'.format(TEST_INPUT_TOPIC))
+            producer.send_messages(TEST_INPUT_TOPIC, str(message_index))
+    except:
+        logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        if kafka is not None:
+            kafka.close()
