@@ -18,6 +18,8 @@
 import logging
 from kazoo.client import KazooClient
 import json
+import sys
+import traceback
 
 logger = logging.getLogger(__name__)
 

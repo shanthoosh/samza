@@ -33,7 +33,7 @@ zk_client = None
 ## TODO: Add docs.
 def __validate_output_topic(topic_name, expected_message_count):
     """
-    Validates that presence of {expected_message_count} messages in topic_name.
+    Checks if topic named topic_name has {expected_message_count} messages.
     """
     kafka_client = None
     try:
@@ -105,6 +105,7 @@ def test_kill_master():
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+        raise
     finally:
         __teardown_zk_client()
 
@@ -126,6 +127,7 @@ def test_kill_single_worker():
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+        raise
     finally:
         __teardown_zk_client()
 
@@ -146,6 +148,7 @@ def test_kill_multiple_workers():
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+        raise
     finally:
         __teardown_zk_client()
 
@@ -167,6 +170,7 @@ def test_kill_leader_and_follower():
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+        raise
     finally:
         __teardown_zk_client()
 
@@ -205,5 +209,6 @@ def test_pause_resume_master():
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+        raise
     finally:
         __teardown_zk_client()
