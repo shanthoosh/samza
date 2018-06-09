@@ -16,30 +16,10 @@
 # under the License.
 
 import os
-import re
-import logging
-import json
-import requests
-import shutil
-import tarfile
-import zopkio.constants as constants
-import zopkio.runtime as runtime
-import templates
-from subprocess import PIPE, Popen
-from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
-import sys
 import logging
 import zopkio.runtime as runtime
-from kafka import SimpleProducer, SimpleConsumer
-import struct
 import time
-import zipfile
-import urllib
-import traceback
-from subprocess import call
-from kazoo.client import KazooClient
-import zopkio.constants as constants
 import zopkio.adhoc_deployer as adhoc_deployer
 
 logger = logging.getLogger(__name__)
