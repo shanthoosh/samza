@@ -28,7 +28,6 @@ import templates
 from subprocess import PIPE, Popen
 from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
-import util
 import sys
 import logging
 import zopkio.runtime as runtime
@@ -41,6 +40,7 @@ import traceback
 from subprocess import call
 from kazoo.client import KazooClient
 import zopkio.constants as constants
+import zopkio.adhoc_deployer as adhoc_deployer
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,15 @@ class StandaloneProcessor():
         self.processor_id = processor_id
         self.package_id = package_id
         self.configs = configs
-        self.deployer = util.get_deployer(self.processor_id)
+        self.deployer = adhoc_deployer.SSHDeployer(self.processor_id, {
+            'install_path': os.path.join(runtime.get_active_config('remote_install_path'), runtime.get_active_config(self.processor_id + '_install_path')),
+            'executable': runtime.get_active_config(self.processor_id + '_executable'),
+            'post_install_cmds': runtime.get_active_config(self.processor_id + '_post_install_cmds', []),
+            'start_command': runtime.get_active_config(self.processor_id + '_start_cmd'),
+            'stop_command': runtime.get_active_config(self.processor_id + '_stop_cmd'),
+            'extract': True,
+            'sync': True,
+        })
 
     ##
     ## TODO: Add docs.
