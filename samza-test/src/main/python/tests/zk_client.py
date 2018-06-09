@@ -49,13 +49,16 @@ logger = logging.getLogger(__name__)
 ## TODO: Add docs.
 class ZkClient():
 
+    ## TODO: Add docs.
     def __init__(self, app_name, app_id):
         self.zk_client = KazooClient(hosts='127.0.0.1:2181')
         self.zk_base_dir = 'app-{0}-{1}/{2}-{3}-coordinationData'.format(app_name, app_id, app_name, app_id)
 
+    ## TODO: Add docs.
     def start(self):
         self.zk_client.start()
 
+    ## TODO: Add docs.
     def stop(self):
         self.zk_client.stop()
 
