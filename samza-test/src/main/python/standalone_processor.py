@@ -65,7 +65,6 @@ class StandaloneProcessor():
         for instance, host in runtime.get_active_config(self.processor_id + '_hosts').iteritems():
             logger.info('Deploying {0} on host: {1}'.format(instance, host))
             self.deployer.deploy(instance, {'hostname': host})
-            time.sleep(10)
 
     ##
     ## TODO: Add docs.

@@ -74,10 +74,10 @@ def test_kill_current_master():
 
         for processor_id, deployer in processors.iteritems():
             logger.info('Checking: {0} for processor_id: {1}.'.format(containers, processor_id))
-            if processor_id is not leader_processor_id:
+            if processor_id != leader_processor_id:
                 assert(processor_id in containers, 'Processor id: {0} doesnt exist in JobModel.'.format(processor_id))
 
-        for processor_id, processor in processors:
+        for processor_id, processor in processors.iteritems():
             logger.info("Killing processor: {0}.".format(processor_id))
             processor.kill()
     finally:
