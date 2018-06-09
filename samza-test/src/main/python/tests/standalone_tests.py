@@ -33,7 +33,7 @@ import zopkio.constants as constants
 from zopkio.deployer import Deployer, Process
 from zopkio.remote_host_helper import better_exec_command, DeploymentError, get_sftp_client, get_ssh_client, open_remote_file, log_output, exec_with_env
 from standalone_processor import StandaloneProcessor
-import zk_util
+from zk_client import ZkClient
 import os
 import shutil
 import unittest
@@ -50,6 +50,8 @@ NUM_MESSAGES = 50
 GROUP_COORDINATION_TIMEOUT_MS = 10
 TEST_INPUT_TOPIC = 'standaloneIntegrationTestKafkaInputTopic'
 TEST_OUTPUT_TOPIC = 'standaloneIntegrationTestKafkaOutputTopic'
+zk_client = None
+
 
 def __load_data():
     kafka = None
@@ -80,63 +82,81 @@ def __kill_all(processors):
         logger.info("Killing processor: {0}.".format(processor_id))
         processor.kill()
 
+def __setup_zk_client():
+    global zk_client
+    zk_client = ZkClient(APP_NAME, APP_ID)
+    zk_client.start()
+
+def __teardown_zk_client():
+    zk_client.stop()
+
 def test_kill_master():
     try:
+        zk_client = __setup_zk_client()
         processors = __create_processors()
         __load_data()
-        leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
+        leader_processor_id = zk_client.get_leader_processor_id()
         processors.pop(leader_processor_id).kill()
 
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
 
-        job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
+        job_model = zk_client.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
 
         for processor_id, deployer in processors.iteritems():
             assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        __teardown_zk_client()
 
 def test_kill_single_worker():
     try:
+        zk_client = __setup_zk_client()
         processors = __create_processors()
         __load_data()
-        leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
+        leader_processor_id = zk_client.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         for processor_id, deployer in processors.iteritems():
             if processor_id != leader_processor_id:
                 processors.pop(processor_id).kill()
                 break
 
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
-        job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
+        job_model = zk_client.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
         for processor_id, deployer in processors.iteritems():
             assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(processor_id)
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        __teardown_zk_client()
 
 def test_kill_multiple_workers():
     try:
+        zk_client = __setup_zk_client()
         processors = __create_processors()
         __load_data()
-        leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
+        leader_processor_id = zk_client.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         for processor_id in processors.keys():
             if processor_id != leader_processor_id:
                 follower = processors.pop(processor_id)
                 follower.kill()
 
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
-        job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
+        job_model = zk_client.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        __teardown_zk_client()
 
 def test_kill_leader_and_follower():
     try:
+        zk_client = __setup_zk_client()
         processors = __create_processors()
         __load_data()
-        leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
+        leader_processor_id = zk_client.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         processors.pop(leader_processor_id).kill()
 
         for processor_id in processors.keys():
@@ -144,18 +164,21 @@ def test_kill_leader_and_follower():
             break
 
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
-        job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
+        job_model = zk_client.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in JobModel.'.format(leader_processor_id)
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        __teardown_zk_client()
 
 def test_pause_resume_master():
     try:
+        zk_client = __setup_zk_client()
         processors = __create_processors()
         __load_data()
 
-        leader_processor_id = zk_util.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
+        leader_processor_id = zk_client.get_leader_processor_id(zk_base_dir=ZK_BASE_DIR)
         leader = processors.pop(leader_processor_id)
 
         logger.info("Pausing the leader processor: {0}.".format(leader_processor_id))
@@ -164,7 +187,7 @@ def test_pause_resume_master():
         logger.info("Waiting for group coordination timeout: {0}".format(GROUP_COORDINATION_TIMEOUT_MS))
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
 
-        job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
+        job_model = zk_client.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
         for processor_id, deployer in processors.iteritems():
             assert processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(processor_id, job_model['containers'])
 
@@ -173,7 +196,7 @@ def test_pause_resume_master():
         leader.resume()
         logger.info("Waiting for group coordination timeout: {0}".format(GROUP_COORDINATION_TIMEOUT_MS))
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
-        job_model = zk_util.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
+        job_model = zk_client.get_latest_job_model(zk_base_dir=ZK_BASE_DIR)
 
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(leader_processor_id, job_model['containers'])
 
@@ -183,3 +206,5 @@ def test_pause_resume_master():
         __kill_all(processors)
     except:
         logger.error(traceback.format_exc(sys.exc_info()))
+    finally:
+        __teardown_zk_client()
