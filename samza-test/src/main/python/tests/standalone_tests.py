@@ -201,6 +201,7 @@ def test_pause_resume_master():
         time.sleep(GROUP_COORDINATION_TIMEOUT_MS)
 
         job_model = zk_client.get_latest_job_model()
+
         assert leader_processor_id in job_model['containers'], 'Processor id: {0} does not exist in containerModel: {1}.'.format(leader_processor_id, job_model['containers'])
 
         for processor_id, deployer in processors.iteritems():
