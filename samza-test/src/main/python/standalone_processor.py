@@ -82,24 +82,23 @@ class StandaloneProcessor:
 
     ## TODO: Add docs.
     def __get_pid(self, process_name):
-        pid_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
-        non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(pid_command)
-        logger.info("Process id command: {0}.".format(pid_command))
-        pids = []
+        ps_command = "ps aux | grep '{0}' | grep -v grep | tr -s ' ' | cut -d ' ' -f 2 | grep -Eo '[0-9]+'".format(process_name)
+        non_failing_command = "{0}; if [ $? -le 1 ]; then true;  else false; fi;".format(ps_command)
+        logger.info("Executing command: {0}.".format(non_failing_command))
         full_output = self.__execute_command(non_failing_command)
+        pids = []
         if len(full_output) > 0:
             pids = [int(pid_str) for pid_str in full_output.split('\n') if pid_str.isdigit()]
         return pids
 
     ## TODO: Add docs.
     def __execute_command(self, command):
-        RECV_BLOCK_SIZE = 16
-        HOST_NAME = 'localhost'
-        with get_ssh_client(HOST_NAME, username=self.username, password=self.password) as ssh:
+        with get_ssh_client('localhost', username=self.username, password=self.password) as ssh:
             chan = exec_with_env(ssh, command, msg="Failed to get PID", env={})
-        output = chan.recv(RECV_BLOCK_SIZE)
-        full_output = output
-        while len(output) > 0:
-            output = chan.recv(RECV_BLOCK_SIZE)
-            full_output += output
-        return full_output
+        execution_result = ''
+        while True:
+            result_buffer = chan.recv(block_size=16)
+            if len(result_buffer) == 0:
+                break
+            execution_result += result_buffer
+        return execution_result
