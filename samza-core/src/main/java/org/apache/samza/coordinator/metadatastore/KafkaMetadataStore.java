@@ -39,7 +39,7 @@ import java.util.Set;
 
 /**
  * An implementation of the {@link MetadataStore} interface where the
- * locality metadata of the samza job is stored in coordinator stream.
+ * locality of the Samza job is stored in coordinator stream.
  */
 public class KafkaMetadataStore implements MetadataStore {
 

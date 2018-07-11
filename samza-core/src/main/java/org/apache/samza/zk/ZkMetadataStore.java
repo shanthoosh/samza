@@ -33,7 +33,7 @@ import java.util.Map;
 
 /**
  * An implementation of the {@link MetadataStore} interface where the
- * metadata of the samza application is stored in zookeeper.
+ * metadata of the Samza application is stored in zookeeper.
  *
  * LocationId for each task is stored in an persistent node in zookeeper.
  * Task locality is stored in the following format in zookeeper:
@@ -41,12 +41,12 @@ import java.util.Map;
  * - {zkBaseRootPath/$appName-$appId-$JobName-$JobId-$stageId/}
  *    - localityData
  *        - task01/
- *           locationId1(stored as value in the task zookeeper node)
+ *           locationId1 (stored as value in the task zookeeper node)
  *        - task02/
- *           locationId2(stored as value in the task zookeeper node)
+ *           locationId2 (stored as value in the task zookeeper node)
  *        ...
  *        - task0N/
- *           locationIdN(stored as value in the task zookeeper node)
+ *           locationIdN (stored as value in the task zookeeper node)
  *
  * LocationId for each processor is stored in an ephemeral node in zookeeper.
  * Processor locality is stored in the following format in zookeeper:
@@ -54,9 +54,9 @@ import java.util.Map;
  * - {zkBaseRootPath/$appName-$appId-$JobName-$JobId-$stageId/}
  *    - processors/
  *        - processor.000001/
- *            locatoinId1(stored as value in processor zookeeper node)
+ *            locatoinId1 (stored as value in processor zookeeper node)
  *        - processor.000002/
- *            locationId2(stored as value in processor zookeeper node)
+ *            locationId2 (stored as value in processor zookeeper node)
  *
  */
 public class ZkMetadataStore implements MetadataStore {
