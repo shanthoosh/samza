@@ -33,7 +33,7 @@ import java.util.Map;
 
 /**
  * An implementation of the {@link MetadataStore} interface where the
- * metadata of the Samza application is stored in zookeeper.
+ * metadata of the Samza job is stored in zookeeper.
  *
  * LocationId for each task is stored in an persistent node in zookeeper.
  * Task locality is stored in the following format in zookeeper:

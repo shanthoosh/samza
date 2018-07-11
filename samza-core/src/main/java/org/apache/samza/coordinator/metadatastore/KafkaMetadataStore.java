@@ -43,7 +43,7 @@ import java.util.Set;
  */
 public class KafkaMetadataStore implements MetadataStore {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(KafkaMetadataStore.class);
+  private static final Logger LOG = LoggerFactory.getLogger(KafkaMetadataStore.class);
   private final Config config;
   private final CoordinatorStreamManager coordinatorStreamManager;
   private final LocalityManager localityManager;
@@ -63,7 +63,7 @@ public class KafkaMetadataStore implements MetadataStore {
 
   @Override
   public void init(SamzaContainerContext containerContext) {
-    LOGGER.info("Starting the coordinator stream system consumer with config: {}.", config);
+    LOG.info("Starting the coordinator stream system consumer with config: {}.", config);
     this.containerContext = containerContext;
     coordinatorStreamManager.start();
     String containerName = String.format("SamzaContainer-%s", this.containerContext.id);
@@ -92,13 +92,13 @@ public class KafkaMetadataStore implements MetadataStore {
       String locationId = entry.getValue().get(SetContainerHostMapping.HOST_KEY);
       processorLocality.put(processorId, new LocationId(locationId));
     }
-    LOGGER.info("Read the locality info: {} from coordinator stream.", processorLocality);
+    LOG.info("Read the locality info: {} from coordinator stream.", processorLocality);
     return processorLocality;
   }
 
   @Override
   public void writeTaskLocality(Collection<TaskName> taskNames, LocationId locationId) {
-    LOGGER.info("Writing container to host mapping for container: {}, locationId: {}.", containerContext.id, locationId.getId());
+    LOG.info("Writing container to host mapping for container: {}, locationId: {}.", containerContext.id, locationId.getId());
     localityManager.writeContainerToHostMapping(containerContext.id, locationId.getId(), "", "");
   }
 
@@ -114,7 +114,7 @@ public class KafkaMetadataStore implements MetadataStore {
 
   @Override
   public void close() {
-    LOGGER.info("Stopping the coordinator stream system consumer.", config);
+    LOG.info("Stopping the coordinator stream system consumer.", config);
     coordinatorStreamManager.stop();
   }
 }
