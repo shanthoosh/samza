@@ -37,7 +37,7 @@ public class TestMetricsSnapshotSerdeV2 {
   @Test
   public void testSerde() {
     MetricsHeader metricsHeader =
-        new MetricsHeader("jobName", "i001", "container 0", "source", "300.14.25.1", "1", "1", 1, 1);
+        new MetricsHeader("jobName", "i001", "execContainerId", "container 0", "source", "300.14.25.1", "1", "1", 1, 1);
 
     ListGauge listGauge = new ListGauge<DiagnosticsExceptionEvent>("exceptions");
     DiagnosticsExceptionEvent diagnosticsExceptionEvent1 =
