@@ -19,14 +19,12 @@
 
 package org.apache.samza.container.grouper.task;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.MapConfig;
-import org.apache.samza.container.SamzaContainerContext;
 import org.apache.samza.coordinator.stream.MockCoordinatorStreamSystemFactory;
 import org.apache.samza.metrics.MetricsRegistryMap;
 import org.apache.samza.system.*;
@@ -70,7 +68,7 @@ public class TestTaskAssignmentManager {
   @Test
   public void testTaskAssignmentManager() {
     TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(config, new MetricsRegistryMap());
-    taskAssignmentManager.init(new SamzaContainerContext("1", config, new ArrayList<>(), new MetricsRegistryMap()));
+    taskAssignmentManager.init(config, new MetricsRegistryMap());
 
     Map<String, String> expectedMap = ImmutableMap.of("Task0", "0", "Task1", "1", "Task2", "2", "Task3", "0", "Task4", "1");
 
@@ -85,9 +83,10 @@ public class TestTaskAssignmentManager {
     taskAssignmentManager.close();
   }
 
-  @Test public void testDeleteMappings() {
+  @Test
+  public void testDeleteMappings() {
     TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(config, new MetricsRegistryMap());
-    taskAssignmentManager.init(new SamzaContainerContext("1", config, new ArrayList<>(), new MetricsRegistryMap()));
+    taskAssignmentManager.init(config, new MetricsRegistryMap());
 
     Map<String, String> expectedMap = ImmutableMap.of("Task0", "0", "Task1", "1");
 
@@ -108,7 +107,7 @@ public class TestTaskAssignmentManager {
 
   @Test public void testTaskAssignmentManagerEmptyCoordinatorStream() {
     TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(config, new MetricsRegistryMap());
-    taskAssignmentManager.init(new SamzaContainerContext("1", config, new ArrayList<>(), new MetricsRegistryMap()));
+    taskAssignmentManager.init(config, new MetricsRegistryMap());
 
     Map<String, String> expectedMap = new HashMap<>();
     Map<String, String> localMap = taskAssignmentManager.readTaskAssignment();
