@@ -384,7 +384,7 @@ public class StreamProcessor {
             state = State.IN_REBALANCE;
             LOGGER.info("Job model expired. Shutting down the container: {} of stream processor: {}.", container, processorId);
             boolean hasContainerShutdown = stopSamzaContainer();
-            if (!hasContainerShutdown) {
+            if (!hasContainerShutdown && !config.getBoolean("ignore.container.shutdown.failures", false)) {
               LOGGER.warn("Container: {} shutdown was unsuccessful. Stopping the stream processor: {}.", container, processorId);
               state = State.STOPPING;
               jobCoordinator.stop();
