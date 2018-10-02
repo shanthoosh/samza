@@ -24,6 +24,7 @@ import java.util.Map;
 
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JobConfig;
+import org.apache.samza.coordinator.metadatastore.TypedMetadataStore;
 import org.apache.samza.coordinator.stream.CoordinatorStreamKeySerde;
 import org.apache.samza.coordinator.stream.CoordinatorStreamValueSerde;
 import org.apache.samza.coordinator.stream.messages.SetTaskContainerMapping;
@@ -42,25 +43,11 @@ import org.slf4j.LoggerFactory;
 public class TaskAssignmentManager {
   private static final Logger LOG = LoggerFactory.getLogger(TaskAssignmentManager.class);
 
-  private final Config config;
   private final Map<String, String> taskNameToContainerId = new HashMap<>();
   private final Serde<String> keySerde;
   private final Serde<String> valueSerde;
 
   private MetadataStore metadataStore;
-
-  /**
-   * Builds the TaskAssignmentManager based upon {@link Config} and {@link MetricsRegistry}.
-   * Uses {@link CoordinatorStreamKeySerde} and {@link CoordinatorStreamValueSerde} to
-   * serialize messages before reading/writing into coordinator stream.
-   *
-   * @param config the configuration required for setting up metadata store.
-   * @param metricsRegistry the registry for reporting metrics.
-   */
-  public TaskAssignmentManager(Config config, MetricsRegistry metricsRegistry) {
-    this(config, metricsRegistry, new CoordinatorStreamKeySerde(SetTaskContainerMapping.TYPE),
-         new CoordinatorStreamValueSerde(SetTaskContainerMapping.TYPE));
-  }
 
   /**
    * Builds the LocalityManager based upon {@link Config} and {@link MetricsRegistry}.
@@ -70,17 +57,13 @@ public class TaskAssignmentManager {
    *
    * Key and value serializer are different for yarn(uses CoordinatorStreamMessage) and standalone(uses native
    * ObjectOutputStream for serialization) modes.
-   * @param config the configuration required for setting up metadata store.
-   * @param metricsRegistry the registry for reporting metrics.
    * @param keySerde the key serializer.
    * @param valueSerde the value serializer.
    */
-  public TaskAssignmentManager(Config config, MetricsRegistry metricsRegistry, Serde<String> keySerde, Serde<String> valueSerde) {
-    this.config = config;
+  public TaskAssignmentManager(MetadataStore store, Serde<String> keySerde, Serde<String> valueSerde) {
+    this.metadataStore = store;
     this.keySerde = keySerde;
     this.valueSerde = valueSerde;
-    MetadataStoreFactory metadataStoreFactory = Util.getObj(new JobConfig(config).getMetadataStoreFactory(), MetadataStoreFactory.class);
-    this.metadataStore = metadataStoreFactory.getMetadataStore(SetTaskContainerMapping.TYPE, config, metricsRegistry);
   }
 
   public void init(Config config, MetricsRegistry metricsRegistry) {

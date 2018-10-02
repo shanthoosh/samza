@@ -42,6 +42,8 @@ import org.apache.samza.system._
 import org.apache.samza.util.Logging
 import org.apache.samza.util.Util
 import org.apache.samza.Partition
+import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping
+import org.apache.samza.metadatastore.MetadataStoreFactory
 
 import scala.collection.JavaConverters._
 
@@ -68,7 +70,11 @@ object JobModelManager extends Logging {
    * @return JobModelManager
    */
   def apply(config: Config, changelogPartitionMapping: util.Map[TaskName, Integer]) = {
-    val localityManager = new LocalityManager(config, new MetricsRegistryMap())
+    val metadataStoreFactory = Util.getObj(new JobConfig(config).getMetadataStoreFactory, classOf[MetadataStoreFactory])
+    val metadataStore = metadataStoreFactory.getMetadataStore("coordinator", config, new MetricsRegistryMap())
+    metadataStore.init()
+
+    val localityManager = new LocalityManager(metadataStore)
 
     // Map the name of each system to the corresponding SystemAdmin
     val systemAdmins = new SystemAdmins(config)

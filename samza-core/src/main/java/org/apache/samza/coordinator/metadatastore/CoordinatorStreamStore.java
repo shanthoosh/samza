@@ -24,17 +24,11 @@ import com.google.common.primitives.UnsignedBytes;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Map;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Objects;
 import java.util.TreeMap;
 import org.apache.samza.Partition;
 import org.apache.samza.config.Config;
-import org.apache.samza.coordinator.stream.messages.CoordinatorStreamMessage;
 import org.apache.samza.metadatastore.MetadataStore;
 import org.apache.samza.metrics.MetricsRegistry;
-import org.apache.samza.serializers.JsonSerde;
-import org.apache.samza.serializers.Serde;
 import org.apache.samza.system.IncomingMessageEnvelope;
 import org.apache.samza.system.SystemAdmin;
 import org.apache.samza.system.SystemConsumer;
@@ -66,8 +60,6 @@ public class CoordinatorStreamStore implements MetadataStore {
   private final SystemProducer systemProducer;
   private final SystemConsumer systemConsumer;
   private final SystemAdmin systemAdmin;
-  private final String type;
-  private final Serde<List<?>> keySerde;
 
   // Using custom comparator since java default comparator offers object identity equality(not value equality) for byte arrays.
   private final Map<byte[], byte[]> bootstrappedMessages = new TreeMap<>(UnsignedBytes.lexicographicalComparator());
@@ -76,10 +68,8 @@ public class CoordinatorStreamStore implements MetadataStore {
 
   private SystemStreamPartitionIterator iterator;
 
-  public CoordinatorStreamStore(String namespace, Config config, MetricsRegistry metricsRegistry) {
+  public CoordinatorStreamStore(Config config, MetricsRegistry metricsRegistry) {
     this.config = config;
-    this.type = namespace;
-    this.keySerde = new JsonSerde<>();
     this.coordinatorSystemStream = CoordinatorStreamUtil.getCoordinatorSystemStream(config);
     this.coordinatorSystemStreamPartition = new SystemStreamPartition(coordinatorSystemStream, new Partition(0));
     SystemFactory systemFactory = CoordinatorStreamUtil.getCoordinatorSystemFactory(config);
@@ -136,15 +126,11 @@ public class CoordinatorStreamStore implements MetadataStore {
       while (iterator.hasNext()) {
         IncomingMessageEnvelope envelope = iterator.next();
         byte[] keyAsBytes = (byte[]) envelope.getKey();
-        Object[] keyArray = keySerde.fromBytes(keyAsBytes).toArray();
-        CoordinatorStreamMessage coordinatorStreamMessage = new CoordinatorStreamMessage(keyArray, new HashMap<>());
-        if (Objects.equals(coordinatorStreamMessage.getType(), type)) {
           if (envelope.getMessage() != null) {
             bootstrappedMessages.put(keyAsBytes, (byte[]) envelope.getMessage());
           } else {
             bootstrappedMessages.remove(keyAsBytes);
           }
-        }
       }
     }
   }

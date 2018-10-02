@@ -26,6 +26,7 @@ import java.util.Map;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JobConfig;
 import org.apache.samza.container.grouper.task.TaskAssignmentManager;
+import org.apache.samza.coordinator.metadatastore.TypedMetadataStore;
 import org.apache.samza.coordinator.stream.CoordinatorStreamKeySerde;
 import org.apache.samza.coordinator.stream.CoordinatorStreamValueSerde;
 import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping;
@@ -44,7 +45,6 @@ import org.slf4j.LoggerFactory;
 public class LocalityManager {
   private static final Logger LOG = LoggerFactory.getLogger(LocalityManager.class);
 
-  private final Config config;
   private final Serde<String> keySerde;
   private final Serde<String> valueSerde;
   private final MetadataStore metadataStore;
@@ -55,11 +55,9 @@ public class LocalityManager {
    * Uses {@link CoordinatorStreamKeySerde} and {@link CoordinatorStreamValueSerde} to
    * serialize messages before reading/writing into coordinator stream.
    *
-   * @param config the configuration required for setting up metadata store.
-   * @param metricsRegistry the registry for reporting metrics.
    */
-  public LocalityManager(Config config, MetricsRegistry metricsRegistry) {
-    this(config, metricsRegistry, new CoordinatorStreamKeySerde(SetContainerHostMapping.TYPE),
+  public LocalityManager(MetadataStore store) {
+    this(store, new CoordinatorStreamKeySerde(SetContainerHostMapping.TYPE),
          new CoordinatorStreamValueSerde(SetContainerHostMapping.TYPE));
   }
 
@@ -69,19 +67,14 @@ public class LocalityManager {
    * into {@link MetadataStore}.
    *
    * Key and value serializer are different for yarn (uses CoordinatorStreamMessage) and standalone (native ObjectOutputStream for serialization) modes.
-   * @param config the configuration required for setting up metadata store.
-   * @param metricsRegistry the registry for reporting metrics.
    * @param keySerde the key serializer.
    * @param valueSerde the value serializer.
    */
-  LocalityManager(Config config, MetricsRegistry metricsRegistry, Serde<String> keySerde, Serde<String> valueSerde) {
-    this.config = config;
-    MetadataStoreFactory metadataStoreFactory = Util.getObj(new JobConfig(config).getMetadataStoreFactory(), MetadataStoreFactory.class);
-    this.metadataStore = metadataStoreFactory.getMetadataStore(SetContainerHostMapping.TYPE, config, metricsRegistry);
-    this.metadataStore.init();
+  LocalityManager(MetadataStore store, Serde<String> keySerde, Serde<String> valueSerde) {
+    this.metadataStore = new TypedMetadataStore(store, SetContainerHostMapping.TYPE);
     this.keySerde = keySerde;
     this.valueSerde = valueSerde;
-    this.taskAssignmentManager = new TaskAssignmentManager(config, metricsRegistry, keySerde, valueSerde);
+    this.taskAssignmentManager = new TaskAssignmentManager(store, keySerde, valueSerde);
   }
 
   /**

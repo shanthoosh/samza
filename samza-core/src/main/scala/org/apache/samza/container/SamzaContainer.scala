@@ -44,6 +44,7 @@ import org.apache.samza.container.disk.DiskSpaceMonitor.Listener
 import org.apache.samza.container.disk.{DiskQuotaPolicyFactory, DiskSpaceMonitor, NoThrottlingDiskQuotaPolicyFactory, PollingScanDiskSpaceMonitor}
 import org.apache.samza.container.host.{StatisticsMonitorImpl, SystemMemoryStatistics, SystemStatisticsMonitor}
 import org.apache.samza.job.model.{ContainerModel, JobModel}
+import org.apache.samza.metadatastore.MetadataStoreFactory
 import org.apache.samza.metrics.{JmxServer, JvmMetrics, MetricsRegistryMap, MetricsReporter}
 import org.apache.samza.serializers._
 import org.apache.samza.serializers.model.SamzaObjectMapper
@@ -956,7 +957,10 @@ class SamzaContainer(
   def storeContainerLocality {
     val isHostAffinityEnabled: Boolean = new ClusterManagerConfig(containerContext.config).getHostAffinityEnabled
     if (isHostAffinityEnabled) {
-      val localityManager: LocalityManager = new LocalityManager(containerContext.config, containerContext.metricsRegistry)
+      val metadataStoreFactory = Util.getObj(containerContext.config.getMetadataStoreFactory, classOf[MetadataStoreFactory])
+      val metadataStore = metadataStoreFactory.getMetadataStore("container", containerContext.config, new MetricsRegistryMap())
+      metadataStore.init()
+      val localityManager: LocalityManager = new LocalityManager(metadataStore)
       val containerName = "SamzaContainer-" + String.valueOf(containerContext.id)
       info("Registering %s with metadata store" format containerName)
       try {
