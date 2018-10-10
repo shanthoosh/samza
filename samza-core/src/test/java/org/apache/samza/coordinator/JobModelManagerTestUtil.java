@@ -19,21 +19,16 @@
 
 package org.apache.samza.coordinator;
 
-import org.apache.samza.config.Config;
-import org.apache.samza.container.LocalityManager;
-import org.apache.samza.container.TaskName;
-import org.apache.samza.coordinator.server.HttpServer;
-import org.apache.samza.job.model.ContainerModel;
-import org.apache.samza.job.model.JobModel;
-import org.apache.samza.job.model.TaskModel;
-import org.apache.samza.metrics.MetricsRegistryMap;
-import org.apache.samza.runtime.LocationId;
-import org.apache.samza.system.StreamMetadataCache;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.samza.config.Config;
+import org.apache.samza.container.LocalityManager;
+import org.apache.samza.coordinator.server.HttpServer;
+import org.apache.samza.job.model.ContainerModel;
+import org.apache.samza.job.model.JobModel;
+import org.apache.samza.system.StreamMetadataCache;
 
 /**
  * Utils to create instances of {@link JobModelManager} in unit tests
@@ -47,11 +42,11 @@ public class JobModelManagerTestUtil {
   public static JobModelManager getJobModelManagerWithLocalityManager(Config config, int containerCount, LocalityManager localityManager, HttpServer server) {
     Map<String, ContainerModel> containers = new java.util.HashMap<>();
     for (int i = 0; i < containerCount; i++) {
-      ContainerModel container = new ContainerModel(String.valueOf(i), i, new HashMap<TaskName, TaskModel>());
+      ContainerModel container = new ContainerModel(String.valueOf(i), new HashMap<>());
       containers.put(String.valueOf(i), container);
     }
     JobModel jobModel = new JobModel(config, containers, localityManager);
-    return new JobModelManager(jobModel, server);
+    return new JobModelManager(jobModel, server, null);
   }
 
   public static JobModelManager getJobModelManagerUsingReadModel(Config config, int containerCount, StreamMetadataCache streamMetadataCache,
@@ -60,7 +55,7 @@ public class JobModelManagerTestUtil {
     for (int i = 0; i < containerCount; i++) {
       containerIds.add(String.valueOf(i));
     }
-    JobModel jobModel = JobModelManager.readJobModel(config, new HashMap<>(), locManager, streamMetadataCache, containerIds, new MetricsRegistryMap(), new LocationId("0"), new HashMap<>(), new HashMap<>());
-    return new JobModelManager(jobModel, server);
+    JobModel jobModel = JobModelManager.readJobModel(config, new HashMap<>(), locManager, streamMetadataCache, containerIds);
+    return new JobModelManager(jobModel, server, null);
   }
 }

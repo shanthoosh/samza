@@ -76,7 +76,7 @@ object OffsetManager extends Logging {
     systemStreamMetadata: Map[SystemStream, SystemStreamMetadata],
     config: Config,
     checkpointManager: CheckpointManager = null,
-    systemAdmins: SystemAdmins = new SystemAdmins(new HashMap[String, SystemAdmin]),
+    systemAdmins: SystemAdmins = SystemAdmins.empty(),
     checkpointListeners: Map[String, CheckpointListener] = Map(),
     offsetManagerMetrics: OffsetManagerMetrics = new OffsetManagerMetrics) = {
     debug("Building offset manager for %s." format systemStreamMetadata)
@@ -142,7 +142,7 @@ class OffsetManager(
    * SystemAdmins that are used to get next offsets from last checkpointed
    * offsets. Map is from system name to SystemAdmin class for the system.
    */
-  val systemAdmins: SystemAdmins = new SystemAdmins(new HashMap[String, SystemAdmin]),
+  val systemAdmins: SystemAdmins = SystemAdmins.empty(),
 
   /**
    * Map of checkpointListeners for the systems that chose to provide one.
@@ -412,8 +412,8 @@ class OffsetManager(
     val taskNameToSSPs: Map[TaskName, Set[SystemStreamPartition]] = systemStreamPartitions
 
     taskNameToSSPs.foreach {
-      case (taskName, systemStreamPartitions) => {
-        systemStreamPartitions.foreach { systemStreamPartition =>
+      case (taskName, systemStreamPartitionsSet) => {
+        systemStreamPartitionsSet.foreach { systemStreamPartition =>
           if (!startingOffsets.contains(taskName) || !startingOffsets(taskName).contains(systemStreamPartition)) {
             val systemStream = systemStreamPartition.getSystemStream
             val partition = systemStreamPartition.getPartition
@@ -445,7 +445,7 @@ class OffsetManager(
               }
 
             } else {
-              throw new SamzaException("No metadata available for partition %s." format systemStreamPartitionMetadata)
+              throw new SamzaException("No metadata available for partition %s." format systemStreamPartition)
             }
           }
         }

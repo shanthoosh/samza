@@ -20,14 +20,14 @@
 package org.apache.samza.operators.spec;
 
 import org.apache.samza.operators.functions.FoldLeftFunction;
-import org.apache.samza.operators.functions.TimerFunction;
+import org.apache.samza.operators.functions.ScheduledFunction;
 import org.apache.samza.operators.functions.WatermarkFunction;
 import org.apache.samza.operators.impl.store.TimeSeriesKeySerde;
 import org.apache.samza.operators.triggers.AnyTrigger;
 import org.apache.samza.operators.triggers.RepeatingTrigger;
 import org.apache.samza.operators.triggers.TimeBasedTrigger;
 import org.apache.samza.operators.triggers.Trigger;
-import org.apache.samza.operators.util.MathUtils;
+import org.apache.samza.util.MathUtil;
 import org.apache.samza.operators.windows.WindowPane;
 import org.apache.samza.operators.windows.internal.WindowInternal;
 import org.apache.samza.serializers.Serde;
@@ -39,6 +39,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.*;
 
 
 /**
@@ -61,6 +63,15 @@ public class WindowOperatorSpec<M, WK, WV> extends OperatorSpec<M, WindowPane<WK
    */
   WindowOperatorSpec(WindowInternal<M, WK, WV> window, String opId) {
     super(OpCode.WINDOW, opId);
+    checkArgument(window.getInitializer() == null ||
+        !(window.getInitializer() instanceof ScheduledFunction || window.getInitializer() instanceof WatermarkFunction),
+        "A window does not accepts a user-defined ScheduledFunction or WatermarkFunction as the initializer.");
+    checkArgument(window.getKeyExtractor() == null ||
+        !(window.getKeyExtractor() instanceof ScheduledFunction || window.getKeyExtractor() instanceof WatermarkFunction),
+        "A window does not accepts a user-defined ScheduledFunction or WatermarkFunction as the keyExtractor.");
+    checkArgument(window.getEventTimeExtractor() == null ||
+        !(window.getEventTimeExtractor() instanceof ScheduledFunction || window.getEventTimeExtractor() instanceof WatermarkFunction),
+        "A window does not accepts a user-defined ScheduledFunction or WatermarkFunction as the eventTimeExtractor.");
     this.window = window;
   }
 
@@ -77,25 +88,25 @@ public class WindowOperatorSpec<M, WK, WV> extends OperatorSpec<M, WindowPane<WK
    * @return the default triggering interval
    */
   public long getDefaultTriggerMs() {
-    List<TimeBasedTrigger> timerTriggers = new ArrayList<>();
+    List<TimeBasedTrigger> timeBasedTriggers = new ArrayList<>();
 
     if (window.getDefaultTrigger() != null) {
-      timerTriggers.addAll(getTimeBasedTriggers(window.getDefaultTrigger()));
+      timeBasedTriggers.addAll(getTimeBasedTriggers(window.getDefaultTrigger()));
     }
     if (window.getEarlyTrigger() != null) {
-      timerTriggers.addAll(getTimeBasedTriggers(window.getEarlyTrigger()));
+      timeBasedTriggers.addAll(getTimeBasedTriggers(window.getEarlyTrigger()));
     }
     if (window.getLateTrigger() != null) {
-      timerTriggers.addAll(getTimeBasedTriggers(window.getLateTrigger()));
+      timeBasedTriggers.addAll(getTimeBasedTriggers(window.getLateTrigger()));
     }
 
-    LOG.info("Got {} timer triggers", timerTriggers.size());
+    LOG.info("Got {} time-based triggers", timeBasedTriggers.size());
 
-    List<Long> candidateDurations = timerTriggers.stream()
+    List<Long> candidateDurations = timeBasedTriggers.stream()
         .map(timeBasedTrigger -> timeBasedTrigger.getDuration().toMillis())
         .collect(Collectors.toList());
 
-    return MathUtils.gcd(candidateDurations);
+    return MathUtil.gcd(candidateDurations);
   }
 
   private List<TimeBasedTrigger> getTimeBasedTriggers(Trigger rootTrigger) {
@@ -124,9 +135,9 @@ public class WindowOperatorSpec<M, WK, WV> extends OperatorSpec<M, WindowPane<WK
   }
 
   @Override
-  public TimerFunction getTimerFn() {
+  public ScheduledFunction getScheduledFn() {
     FoldLeftFunction fn = window.getFoldLeftFunction();
-    return fn instanceof TimerFunction ? (TimerFunction) fn : null;
+    return fn instanceof ScheduledFunction ? (ScheduledFunction) fn : null;
   }
 
   @Override

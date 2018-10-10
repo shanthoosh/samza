@@ -19,35 +19,38 @@
 
 package org.apache.samza.sql.data;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Objects;
 import org.apache.commons.lang.Validate;
+import org.apache.samza.sql.SamzaSqlRelRecord;
+import org.codehaus.jackson.annotate.JsonProperty;
 
 
 /**
  * Samza sql relational message. Each Samza sql relational message represents a relational row in a table.
- * Each row of the relational table and hence SamzaSqlRelMessage consists of list of column values and
- * their associated column names. Right now we donot store any other metadata other than the column name in the
- * SamzaSqlRelationalMessage, In future if we find a need, we could add additional column ddl metadata around
- * primary Key, nullability, etc.
+ * Each row of the relational table consists of a primary key and {@link SamzaSqlRelRecord}, which consists of a list
+ * of column values and the associated column names.
  */
-public class SamzaSqlRelMessage {
+public class SamzaSqlRelMessage implements Serializable {
 
   public static final String KEY_NAME = "__key__";
 
-  private final List<Object> fieldValues = new ArrayList<>();
-  private final List<String> fieldNames = new ArrayList<>();
   private final Object key;
+
+  @JsonProperty("samzaSqlRelRecord")
+  private final SamzaSqlRelRecord samzaSqlRelRecord;
 
   /**
    * Creates a {@link SamzaSqlRelMessage} from the list of relational fields and values.
-   * If the field list contains KEY, then it extracts the key out of the fields to creates a
-   * RelMessage with key and values otherwise creates a Relmessage without the key.
+   * If the field list contains KEY, then it extracts the key out of the fields to create a
+   * {@link SamzaSqlRelRecord} along with key, otherwise creates a {@link SamzaSqlRelRecord}
+   * without the key.
    * @param fieldNames Ordered list of field names in the row.
-   * @param fieldValues  Ordered list of all the values in the row. Some of the fields can be null, This could be result of
-   *               delete change capture event in the stream or because of the result of the outer join or the fields
-   *               themselves are null in the original stream.
+   * @param fieldValues  Ordered list of all the values in the row. Some of the fields can be null, This could be
+   *                     result of delete change capture event in the stream or because of the result of the outer join
+   *                     or the fields themselves are null in the original stream.
    */
   public SamzaSqlRelMessage(List<String> fieldNames, List<Object> fieldValues) {
     Validate.isTrue(fieldNames.size() == fieldValues.size(), "Field Names and values are not of same length.");
@@ -57,10 +60,8 @@ public class SamzaSqlRelMessage {
     if (keyIndex != -1) {
       key = fieldValues.get(keyIndex);
     }
-
     this.key = key;
-    this.fieldNames.addAll(fieldNames);
-    this.fieldValues.addAll(fieldValues);
+    this.samzaSqlRelRecord = new SamzaSqlRelRecord(fieldNames, fieldValues);
   }
 
   /**
@@ -74,41 +75,51 @@ public class SamzaSqlRelMessage {
    */
   public SamzaSqlRelMessage(Object key, List<String> fieldNames, List<Object> fieldValues) {
     Validate.isTrue(fieldNames.size() == fieldValues.size(), "Field Names and values are not of same length.");
+
+    List<String> tmpFieldNames = new ArrayList<>();
+    List<Object> tmpFieldValues = new ArrayList<>();
+
     this.key = key;
-    this.fieldNames.add(KEY_NAME);
-    this.fieldNames.addAll(fieldNames);
-    this.fieldValues.add(key);
-    this.fieldValues.addAll(fieldValues);
+    tmpFieldNames.add(KEY_NAME);
+    tmpFieldValues.add(key);
+
+    tmpFieldNames.addAll(fieldNames);
+    tmpFieldValues.addAll(fieldValues);
+
+    this.samzaSqlRelRecord = new SamzaSqlRelRecord(tmpFieldNames, tmpFieldValues);
   }
 
   /**
-   * Get the field names of all the columns in the relational message.
-   * @return the field names of all columns.
+   * Creates the SamzaSqlRelMessage from {@link SamzaSqlRelRecord}.
+   * @param samzaSqlRelRecord represents the rel record.
    */
-  public List<String> getFieldNames() {
-    return fieldNames;
+  public SamzaSqlRelMessage(@JsonProperty("samzaSqlRelRecord") SamzaSqlRelRecord samzaSqlRelRecord) {
+    this(samzaSqlRelRecord.getFieldNames(), samzaSqlRelRecord.getFieldValues());
   }
 
-  public List<Object> getFieldValues() {
-    return this.fieldValues;
+  @JsonProperty("samzaSqlRelRecord")
+  public SamzaSqlRelRecord getSamzaSqlRelRecord() {
+    return samzaSqlRelRecord;
   }
 
   public Object getKey() {
     return key;
   }
 
-  /**
-   * Get the value of the field corresponding to the field name.
-   * @param name Name of the field.
-   * @return returns the value of the field.
-   */
-  public Optional<Object> getField(String name) {
-    for (int index = 0; index < fieldNames.size(); index++) {
-      if (fieldNames.get(index).equals(name)) {
-        return Optional.ofNullable(fieldValues.get(index));
-      }
-    }
+  @Override
+  public int hashCode() {
+    return Objects.hash(key, samzaSqlRelRecord);
+  }
 
-    return Optional.empty();
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj)
+      return true;
+    if (obj == null)
+      return false;
+    if (getClass() != obj.getClass())
+      return false;
+    SamzaSqlRelMessage other = (SamzaSqlRelMessage) obj;
+    return Objects.equals(key, other.key) && Objects.equals(samzaSqlRelRecord, other.samzaSqlRelRecord);
   }
 }

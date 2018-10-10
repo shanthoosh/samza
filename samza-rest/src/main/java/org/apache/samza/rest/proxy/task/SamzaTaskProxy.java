@@ -34,7 +34,7 @@ import org.apache.samza.config.JobConfig;
 import org.apache.samza.config.MapConfig;
 import org.apache.samza.config.StorageConfig;
 import org.apache.samza.container.LocalityManager;
-import org.apache.samza.coordinator.stream.CoordinatorStreamManager;
+import org.apache.samza.container.grouper.task.TaskAssignmentManager;
 import org.apache.samza.coordinator.stream.CoordinatorStreamSystemConsumer;
 import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping;
 import org.apache.samza.metrics.MetricsRegistryMap;
@@ -42,7 +42,7 @@ import org.apache.samza.rest.model.Task;
 import org.apache.samza.rest.proxy.installation.InstallationFinder;
 import org.apache.samza.rest.proxy.installation.InstallationRecord;
 import org.apache.samza.rest.proxy.job.JobInstance;
-import org.apache.samza.util.ClassLoaderHelper;
+import org.apache.samza.util.CoordinatorStreamUtil;
 import org.apache.samza.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,11 +113,11 @@ public class SamzaTaskProxy implements TaskProxy {
   private Config getCoordinatorSystemConfig(JobInstance jobInstance) {
     try {
       InstallationRecord record = installFinder.getAllInstalledJobs().get(jobInstance);
-      ConfigFactory configFactory =  ClassLoaderHelper.fromClassName(taskResourceConfig.getJobConfigFactory());
+      ConfigFactory configFactory =  Util.getObj(taskResourceConfig.getJobConfigFactory(), ConfigFactory.class);
       Config config = configFactory.getConfig(new URI(String.format("file://%s", record.getConfigFilePath())));
       Map<String, String> configMap = ImmutableMap.of(JobConfig.JOB_ID(), jobInstance.getJobId(),
                                                       JobConfig.JOB_NAME(), jobInstance.getJobName());
-      return Util.buildCoordinatorStreamConfig(new MapConfig(ImmutableList.of(config, configMap)));
+      return CoordinatorStreamUtil.buildCoordinatorStreamConfig(new MapConfig(ImmutableList.of(config, configMap)));
     } catch (Exception e) {
       LOG.error(String.format("Failed to get coordinator stream config for job : %s", jobInstance), e);
       throw new SamzaException(e);
@@ -130,9 +130,10 @@ public class SamzaTaskProxy implements TaskProxy {
    * @return list of {@link Task} constructed from job model in coordinator stream.
    */
   protected List<Task> readTasksFromCoordinatorStream(CoordinatorStreamSystemConsumer consumer) {
-    LocalityManager localityManager = new LocalityManager(new MapConfig(), new MetricsRegistryMap());
+    LocalityManager localityManager = new LocalityManager(consumer.getConfig(), new MetricsRegistryMap());
     Map<String, Map<String, String>> containerIdToHostMapping = localityManager.readContainerLocality();
-    Map<String, String> taskNameToContainerIdMapping = localityManager.getTaskAssignmentManager().readTaskAssignment();
+    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(consumer.getConfig(), new MetricsRegistryMap());
+    Map<String, String> taskNameToContainerIdMapping = taskAssignmentManager.readTaskAssignment();
     StorageConfig storageConfig = new StorageConfig(consumer.getConfig());
     List<String> storeNames = JavaConverters.seqAsJavaListConverter(storageConfig.getStoreNames()).asJava();
     return taskNameToContainerIdMapping.entrySet()

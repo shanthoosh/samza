@@ -20,7 +20,9 @@
 package org.apache.samza.storage;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,13 +42,17 @@ import org.apache.samza.job.model.TaskModel;
 import org.apache.samza.metrics.MetricsRegistryMap;
 import org.apache.samza.serializers.ByteSerde;
 import org.apache.samza.serializers.Serde;
+import org.apache.samza.system.SSPMetadataCache;
 import org.apache.samza.system.StreamMetadataCache;
 import org.apache.samza.system.SystemAdmins;
 import org.apache.samza.system.SystemConsumer;
 import org.apache.samza.system.SystemFactory;
 import org.apache.samza.system.SystemStream;
 import org.apache.samza.system.SystemStreamPartition;
+import org.apache.samza.util.Clock;
 import org.apache.samza.util.CommandLine;
+import org.apache.samza.util.ScalaJavaUtil;
+import org.apache.samza.util.StreamUtil;
 import org.apache.samza.util.SystemClock;
 import org.apache.samza.util.Util;
 import org.slf4j.Logger;
@@ -125,7 +131,7 @@ public class StorageRecovery extends CommandLine {
     coordinatorStreamManager.start();
     coordinatorStreamManager.bootstrap();
     ChangelogStreamManager changelogStreamManager = new ChangelogStreamManager(coordinatorStreamManager);
-    JobModel jobModel = JobModelManager.apply(coordinatorStreamManager, changelogStreamManager.readPartitionMapping()).jobModel();
+    JobModel jobModel = JobModelManager.apply(coordinatorStreamManager.getConfig(), changelogStreamManager.readPartitionMapping()).jobModel();
     containers = jobModel.getContainers();
     coordinatorStreamManager.stop();
   }
@@ -146,12 +152,12 @@ public class StorageRecovery extends CommandLine {
       log.info("stream name for " + storeName + " is " + streamName);
 
       if (streamName != null) {
-        changeLogSystemStreams.put(storeName, Util.getSystemStreamFromNames(streamName));
+        changeLogSystemStreams.put(storeName, StreamUtil.getSystemStreamFromNames(streamName));
       }
 
       String factoryClass = config.getStorageFactoryClassName(storeName);
       if (factoryClass != null) {
-        storageEngineFactories.put(storeName, Util.<StorageEngineFactory<Object, Object>>getObj(factoryClass));
+        storageEngineFactories.put(storeName, Util.getObj(factoryClass, StorageEngineFactory.class));
       } else {
         throw new SamzaException("Missing storage factory for " + storeName + ".");
       }
@@ -195,11 +201,15 @@ public class StorageRecovery extends CommandLine {
    */
   @SuppressWarnings({ "unchecked", "rawtypes" })
   private void getTaskStorageManagers() {
-    StreamMetadataCache streamMetadataCache = new StreamMetadataCache(systemAdmins, 5000, SystemClock.instance());
+    Clock clock = SystemClock.instance();
+    StreamMetadataCache streamMetadataCache = new StreamMetadataCache(systemAdmins, 5000, clock);
+    // don't worry about prefetching for this; looks like the tool doesn't flush to offset files anyways
+    SSPMetadataCache sspMetadataCache =
+        new SSPMetadataCache(systemAdmins, Duration.ofSeconds(5), clock, Collections.emptySet());
 
     for (ContainerModel containerModel : containers.values()) {
       HashMap<String, StorageEngine> taskStores = new HashMap<String, StorageEngine>();
-      SamzaContainerContext containerContext = new SamzaContainerContext(containerModel.getProcessorId(), jobConfig, containerModel.getTasks()
+      SamzaContainerContext containerContext = new SamzaContainerContext(containerModel.getId(), jobConfig, containerModel.getTasks()
           .keySet(), new MetricsRegistryMap());
 
       for (TaskModel taskModel : containerModel.getTasks().values()) {
@@ -229,11 +239,12 @@ public class StorageRecovery extends CommandLine {
         }
         TaskStorageManager taskStorageManager = new TaskStorageManager(
             taskModel.getTaskName(),
-            Util.javaMapAsScalaMap(taskStores),
-            Util.javaMapAsScalaMap(storeConsumers),
-            Util.javaMapAsScalaMap(changeLogSystemStreams),
+            ScalaJavaUtil.toScalaMap(taskStores),
+            ScalaJavaUtil.toScalaMap(storeConsumers),
+            ScalaJavaUtil.toScalaMap(changeLogSystemStreams),
             maxPartitionNumber,
             streamMetadataCache,
+            sspMetadataCache,
             storeBaseDir,
             storeBaseDir,
             taskModel.getChangelogPartition(),

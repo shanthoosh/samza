@@ -20,18 +20,18 @@
 package org.apache.samza.container;
 
 import com.google.common.collect.ImmutableSet;
+import java.util.function.Function;
 import org.apache.samza.checkpoint.OffsetManager;
 import org.apache.samza.job.model.JobModel;
 import org.apache.samza.metrics.ReadableMetricsRegistry;
-import org.apache.samza.storage.TaskStorageManager;
 import org.apache.samza.storage.kv.KeyValueStore;
 import org.apache.samza.system.StreamMetadataCache;
 import org.apache.samza.system.SystemStreamPartition;
 import org.apache.samza.table.Table;
 import org.apache.samza.table.TableManager;
-import org.apache.samza.task.SystemTimerScheduler;
+import org.apache.samza.task.EpochTimeScheduler;
 import org.apache.samza.task.TaskContext;
-import org.apache.samza.task.TimerCallback;
+import org.apache.samza.scheduler.ScheduledCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +40,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 
+
+/**
+ * TODO this will be replaced by {@link org.apache.samza.context.TaskContextImpl} in the near future by SAMZA-1714
+ */
 public class TaskContextImpl implements TaskContext {
   private static final Logger LOG = LoggerFactory.getLogger(TaskContextImpl.class);
 
@@ -48,12 +52,12 @@ public class TaskContextImpl implements TaskContext {
   private final SamzaContainerContext containerContext;
   private final Set<SystemStreamPartition> systemStreamPartitions;
   private final OffsetManager offsetManager;
-  private final TaskStorageManager storageManager;
+  private final Function<String, KeyValueStore> kvStoreSupplier;
   private final TableManager tableManager;
   private final JobModel jobModel;
   private final StreamMetadataCache streamMetadataCache;
   private final Map<String, Object> objectRegistry = new HashMap<>();
-  private final SystemTimerScheduler timerScheduler;
+  private final EpochTimeScheduler timerScheduler;
 
   private Object userContext = null;
 
@@ -62,7 +66,7 @@ public class TaskContextImpl implements TaskContext {
                          SamzaContainerContext containerContext,
                          Set<SystemStreamPartition> systemStreamPartitions,
                          OffsetManager offsetManager,
-                         TaskStorageManager storageManager,
+                         Function<String, KeyValueStore> kvStoreSupplier,
                          TableManager tableManager,
                          JobModel jobModel,
                          StreamMetadataCache streamMetadataCache,
@@ -72,11 +76,11 @@ public class TaskContextImpl implements TaskContext {
     this.containerContext = containerContext;
     this.systemStreamPartitions = ImmutableSet.copyOf(systemStreamPartitions);
     this.offsetManager = offsetManager;
-    this.storageManager = storageManager;
+    this.kvStoreSupplier = kvStoreSupplier;
     this.tableManager = tableManager;
     this.jobModel = jobModel;
     this.streamMetadataCache = streamMetadataCache;
-    this.timerScheduler = SystemTimerScheduler.create(timerExecutor);
+    this.timerScheduler = EpochTimeScheduler.create(timerExecutor);
   }
 
   @Override
@@ -91,12 +95,11 @@ public class TaskContextImpl implements TaskContext {
 
   @Override
   public KeyValueStore getStore(String storeName) {
-    if (storageManager != null) {
-      return (KeyValueStore) storageManager.apply(storeName);
-    } else {
+    KeyValueStore store = kvStoreSupplier.apply(storeName);
+    if (store == null) {
       LOG.warn("No store found for name: {}", storeName);
-      return null;
     }
+    return store;
   }
 
   @Override
@@ -135,12 +138,12 @@ public class TaskContextImpl implements TaskContext {
   }
 
   @Override
-  public <K> void registerTimer(K key, long timestamp, TimerCallback<K> callback) {
+  public <K> void scheduleCallback(K key, long timestamp, ScheduledCallback<K> callback) {
     timerScheduler.setTimer(key, timestamp, callback);
   }
 
   @Override
-  public <K> void deleteTimer(K key) {
+  public <K> void deleteScheduledCallback(K key) {
     timerScheduler.deleteTimer(key);
   }
 
@@ -160,7 +163,7 @@ public class TaskContextImpl implements TaskContext {
     return streamMetadataCache;
   }
 
-  public SystemTimerScheduler getTimerScheduler() {
+  public EpochTimeScheduler getTimerScheduler() {
     return timerScheduler;
   }
 }

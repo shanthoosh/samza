@@ -30,7 +30,7 @@ import org.apache.samza.metrics.MetricsRegistry;
 public class ZkMetadataStoreFactory implements MetadataStoreFactory {
 
   @Override
-  public MetadataStore getMetadataStore(Config config, MetricsRegistry metricsRegistry) {
-    return new ZkMetadataStore(config, metricsRegistry);
+  public MetadataStore getMetadataStore(String namespace, Config config, MetricsRegistry metricsRegistry) {
+    return new ZkMetadataStore(namespace, config, metricsRegistry);
   }
 }

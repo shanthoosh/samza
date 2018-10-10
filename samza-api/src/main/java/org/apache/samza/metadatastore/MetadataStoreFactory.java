@@ -22,9 +22,9 @@ import org.apache.samza.config.Config;
 import org.apache.samza.metrics.MetricsRegistry;
 
 /**
- * Builds the {@link MetadataStore} based upon the provided {@link Config}
+ * Builds the {@link MetadataStore} based upon the provided namespace, {@link Config}
  * and {@link MetricsRegistry}.
  */
 public interface MetadataStoreFactory {
-  MetadataStore getMetadataStore(Config config, MetricsRegistry metricsRegistry);
+  MetadataStore getMetadataStore(String namespace, Config config, MetricsRegistry metricsRegistry);
 }

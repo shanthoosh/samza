@@ -23,7 +23,7 @@ package org.apache.samza.config
 import java.io.File
 
 import org.apache.samza.container.grouper.stream.GroupByPartitionFactory
-import org.apache.samza.coordinator.metadatastore.KafkaMetadataStoreFactory
+import org.apache.samza.coordinator.metadatastore.CoordinatorStreamMetadataStoreFactory
 import org.apache.samza.runtime.DefaultLocationIdProviderFactory
 import org.apache.samza.util.Logging
 
@@ -39,6 +39,7 @@ object JobConfig {
    */
   val CONFIG_REWRITERS = "job.config.rewriters" // streaming.job_config_rewriters
   val CONFIG_REWRITER_CLASS = "job.config.rewriter.%s.class" // streaming.job_config_rewriter_class - regex, system, config
+  val CONFIG_OVERRIDE_JOBS_PREFIX = "jobs.%s."
   val JOB_NAME = "job.name" // streaming.job_name
   val JOB_ID = "job.id" // streaming.job_id
   val SAMZA_FWK_PATH = "samza.fwk.path"
@@ -85,6 +86,20 @@ object JobConfig {
   // Processor Config Constants
   val PROCESSOR_ID = "processor.id"
   val PROCESSOR_LIST = "processor.list"
+
+  // Represents the store path for non-changelog stores.
+  val JOB_NON_LOGGED_STORE_BASE_DIR = "job.non-logged.store.base.dir"
+
+  // Represents the store path for stores with changelog enabled. Typically the stores are not cleaned up
+  // across application restarts
+  val JOB_LOGGED_STORE_BASE_DIR = "job.logged.store.base.dir"
+
+  // Enables diagnostic appender for logging exception events
+  val JOB_DIAGNOSTICS_ENABLED = "job.diagnostics.enabled"
+
+  // Specify DiagnosticAppender class
+  val DIAGNOSTICS_APPENDER_CLASS = "job.diagnostics.appender.class"
+  val DEFAULT_DIAGNOSTICS_APPENDER_CLASS = "org.apache.samza.logging.log4j.SimpleDiagnosticsAppender"
 
   implicit def Config2Job(config: Config) = new JobConfig(config)
 
@@ -149,7 +164,7 @@ class JobConfig(config: Config) extends ScalaMapConfig(config) with Logging {
 
   def getStreamJobFactoryClass = getOption(JobConfig.STREAM_JOB_FACTORY_CLASS)
 
-  def getJobId = getOption(JobConfig.JOB_ID)
+  def getJobId = getOption(JobConfig.JOB_ID).getOrElse("1")
 
   def failOnCheckpointValidation = { getBoolean(JobConfig.JOB_FAIL_CHECKPOINT_VALIDATION, true) }
 
@@ -158,6 +173,8 @@ class JobConfig(config: Config) extends ScalaMapConfig(config) with Logging {
   def getConfigRewriterClass(name: String) = getOption(JobConfig.CONFIG_REWRITER_CLASS format name)
 
   def getSystemStreamPartitionGrouperFactory = getOption(JobConfig.SSP_GROUPER_FACTORY).getOrElse(classOf[GroupByPartitionFactory].getCanonicalName)
+
+  def getLocationIdProviderFactory = getOption(JobConfig.LOCATION_ID_PROVIDER_FACTORY).getOrElse(classOf[DefaultLocationIdProviderFactory].getCanonicalName)
 
   def getSecurityManagerFactory = getOption(JobConfig.JOB_SECURITY_MANAGER_FACTORY)
 
@@ -181,7 +198,15 @@ class JobConfig(config: Config) extends ScalaMapConfig(config) with Logging {
 
   def getDebounceTimeMs = getInt(JobConfig.JOB_DEBOUNCE_TIME_MS, JobConfig.DEFAULT_DEBOUNCE_TIME_MS)
 
-  def getMetadataStoreFactory = getOption(JobConfig.METADATA_STORE_FACTORY).getOrElse(classOf[KafkaMetadataStoreFactory].getCanonicalName)
+  def getNonLoggedStorePath = getOption(JobConfig.JOB_NON_LOGGED_STORE_BASE_DIR)
 
-  def getLocationIdProviderFactory = getOption(JobConfig.LOCATION_ID_PROVIDER_FACTORY).getOrElse(classOf[DefaultLocationIdProviderFactory].getCanonicalName)
+  def getLoggedStorePath = getOption(JobConfig.JOB_LOGGED_STORE_BASE_DIR)
+
+  def getMetadataStoreFactory = getOption(JobConfig.METADATA_STORE_FACTORY).getOrElse(classOf[CoordinatorStreamMetadataStoreFactory].getCanonicalName)
+
+  def getDiagnosticsEnabled = { getBoolean(JobConfig.JOB_DIAGNOSTICS_ENABLED, false) }
+
+  def getDiagnosticsAppenderClass = {
+    getOrDefault(JobConfig.DIAGNOSTICS_APPENDER_CLASS, JobConfig.DEFAULT_DIAGNOSTICS_APPENDER_CLASS)
+  }
 }

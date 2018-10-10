@@ -21,37 +21,38 @@ package org.apache.samza.execution;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
-
+import java.util.stream.Collectors;
 import org.apache.samza.SamzaException;
+import org.apache.samza.application.ApplicationDescriptor;
+import org.apache.samza.application.ApplicationDescriptorImpl;
+import org.apache.samza.application.LegacyTaskApplication;
 import org.apache.samza.config.ApplicationConfig;
 import org.apache.samza.config.ClusterManagerConfig;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JobConfig;
-import org.apache.samza.operators.StreamGraphImpl;
-import org.apache.samza.operators.spec.JoinOperatorSpec;
-import org.apache.samza.operators.spec.OperatorSpec;
+import org.apache.samza.config.StreamConfig;
+import org.apache.samza.operators.BaseTableDescriptor;
 import org.apache.samza.system.StreamSpec;
-import org.apache.samza.system.SystemStream;
 import org.apache.samza.table.TableSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.samza.util.StreamUtil.*;
+
 
 /**
- * The ExecutionPlanner creates the physical execution graph for the StreamGraph, and
+ * The ExecutionPlanner creates the physical execution graph for the {@link ApplicationDescriptorImpl}, and
  * the intermediate topics needed for the execution.
  */
+// TODO: ExecutionPlanner needs to be able to generate single node JobGraph for low-level TaskApplication as well (SAMZA-1811)
 public class ExecutionPlanner {
   private static final Logger log = LoggerFactory.getLogger(ExecutionPlanner.class);
-
-  static final int MAX_INFERRED_PARTITIONS = 256;
 
   private final Config config;
   private final StreamManager streamManager;
@@ -61,19 +62,17 @@ public class ExecutionPlanner {
     this.streamManager = streamManager;
   }
 
-  public ExecutionPlan plan(StreamGraphImpl streamGraph) throws Exception {
+  public ExecutionPlan plan(ApplicationDescriptorImpl<? extends ApplicationDescriptor> appDesc) {
     validateConfig();
 
     // create physical job graph based on stream graph
-    JobGraph jobGraph = createJobGraph(streamGraph);
+    JobGraph jobGraph = createJobGraph(config, appDesc);
 
     // fetch the external streams partition info
-    updateExistingPartitions(jobGraph, streamManager);
+    setInputAndOutputStreamPartitionCount(jobGraph, streamManager);
 
-    if (!jobGraph.getIntermediateStreamEdges().isEmpty()) {
-      // figure out the partitions for internal streams
-      calculatePartitions(streamGraph, jobGraph);
-    }
+    // figure out the partitions for internal streams
+    new IntermediateStreamManager(config, appDesc).calculatePartitions(jobGraph);
 
     return jobGraph;
   }
@@ -82,59 +81,54 @@ public class ExecutionPlanner {
     ApplicationConfig appConfig = new ApplicationConfig(config);
     ClusterManagerConfig clusterConfig = new ClusterManagerConfig(config);
     // currently we don't support host-affinity in batch mode
-    if (appConfig.getAppMode() == ApplicationConfig.ApplicationMode.BATCH
-        && clusterConfig.getHostAffinityEnabled()) {
-      throw new SamzaException("Host affinity is not supported in batch mode. Please configure job.host-affinity.enabled=false.");
+    if (appConfig.getAppMode() == ApplicationConfig.ApplicationMode.BATCH && clusterConfig.getHostAffinityEnabled()) {
+      throw new SamzaException(String.format("Host affinity is not supported in batch mode. Please configure %s=false.",
+          ClusterManagerConfig.CLUSTER_MANAGER_HOST_AFFINITY_ENABLED));
     }
   }
 
   /**
-   * Create the physical graph from StreamGraph
+   * Create the physical graph from {@link ApplicationDescriptorImpl}
    */
-  /* package private */ JobGraph createJobGraph(StreamGraphImpl streamGraph) {
-    JobGraph jobGraph = new JobGraph(config);
-    Set<StreamSpec> sourceStreams = new HashSet<>(streamGraph.getInputOperators().keySet());
-    Set<StreamSpec> sinkStreams = new HashSet<>(streamGraph.getOutputStreams().keySet());
-    Set<StreamSpec> intStreams = new HashSet<>(sourceStreams);
-    Set<TableSpec> tables = new HashSet<>(streamGraph.getTables().keySet());
-    intStreams.retainAll(sinkStreams);
-    sourceStreams.removeAll(intStreams);
-    sinkStreams.removeAll(intStreams);
+  /* package private */
+  JobGraph createJobGraph(Config config, ApplicationDescriptorImpl<? extends ApplicationDescriptor> appDesc) {
+    JobGraph jobGraph = new JobGraph(config, appDesc);
+    StreamConfig streamConfig = new StreamConfig(config);
+    // Source streams contain both input and intermediate streams.
+    Set<StreamSpec> sourceStreams = getStreamSpecs(appDesc.getInputStreamIds(), streamConfig);
+    // Sink streams contain both output and intermediate streams.
+    Set<StreamSpec> sinkStreams = getStreamSpecs(appDesc.getOutputStreamIds(), streamConfig);
+
+    Set<StreamSpec> intermediateStreams = Sets.intersection(sourceStreams, sinkStreams);
+    Set<StreamSpec> inputStreams = Sets.difference(sourceStreams, intermediateStreams);
+    Set<StreamSpec> outputStreams = Sets.difference(sinkStreams, intermediateStreams);
+
+    Set<TableSpec> tables = appDesc.getTableDescriptors().stream()
+        .map(tableDescriptor -> ((BaseTableDescriptor) tableDescriptor).getTableSpec()).collect(Collectors.toSet());
 
     // For this phase, we have a single job node for the whole dag
     String jobName = config.get(JobConfig.JOB_NAME());
     String jobId = config.get(JobConfig.JOB_ID(), "1");
-    JobNode node = jobGraph.getOrCreateJobNode(jobName, jobId, streamGraph);
+    JobNode node = jobGraph.getOrCreateJobNode(jobName, jobId);
 
-    // add sources
-    sourceStreams.forEach(spec -> jobGraph.addSource(spec, node));
+    // Add input streams
+    inputStreams.forEach(spec -> jobGraph.addInputStream(spec, node));
 
-    // add sinks
-    sinkStreams.forEach(spec -> jobGraph.addSink(spec, node));
+    // Add output streams
+    outputStreams.forEach(spec -> jobGraph.addOutputStream(spec, node));
 
-    // add intermediate streams
-    intStreams.forEach(spec -> jobGraph.addIntermediateStream(spec, node, node));
+    // Add intermediate streams
+    intermediateStreams.forEach(spec -> jobGraph.addIntermediateStream(spec, node, node));
 
-    // add tables
+    // Add tables
     tables.forEach(spec -> jobGraph.addTable(spec, node));
 
-    jobGraph.validate();
+    if (!LegacyTaskApplication.class.isAssignableFrom(appDesc.getAppClass())) {
+      // skip the validation when input streamIds are empty. This is only possible for LegacyTaskApplication
+      jobGraph.validate();
+    }
 
     return jobGraph;
-  }
-
-  /**
-   * Figure out the number of partitions of all streams
-   */
-  /* package private */ void calculatePartitions(StreamGraphImpl streamGraph, JobGraph jobGraph) {
-    // calculate the partitions for the input streams of join operators
-    calculateJoinInputPartitions(streamGraph, jobGraph);
-
-    // calculate the partitions for the rest of intermediate streams
-    calculateIntStreamPartitions(jobGraph, config);
-
-    // validate all the partitions are assigned
-    validatePartitions(jobGraph);
   }
 
   /**
@@ -142,153 +136,42 @@ public class ExecutionPlanner {
    * @param jobGraph {@link JobGraph}
    * @param streamManager the {@link StreamManager} to interface with the streams.
    */
-  /* package private */ static void updateExistingPartitions(JobGraph jobGraph, StreamManager streamManager) {
+  /* package private */ static void setInputAndOutputStreamPartitionCount(JobGraph jobGraph, StreamManager streamManager) {
     Set<StreamEdge> existingStreams = new HashSet<>();
-    existingStreams.addAll(jobGraph.getSources());
-    existingStreams.addAll(jobGraph.getSinks());
+    existingStreams.addAll(jobGraph.getInputStreams());
+    existingStreams.addAll(jobGraph.getOutputStreams());
 
+    // System to StreamEdges
     Multimap<String, StreamEdge> systemToStreamEdges = HashMultimap.create();
-    // group the StreamEdge(s) based on the system name
-    existingStreams.forEach(streamEdge -> {
-        SystemStream systemStream = streamEdge.getSystemStream();
-        systemToStreamEdges.put(systemStream.getSystem(), streamEdge);
-      });
-    for (Map.Entry<String, Collection<StreamEdge>> entry : systemToStreamEdges.asMap().entrySet()) {
-      String systemName = entry.getKey();
-      Collection<StreamEdge> streamEdges = entry.getValue();
+
+    // Group StreamEdges by system
+    for (StreamEdge streamEdge : existingStreams) {
+      String system = streamEdge.getSystemStream().getSystem();
+      systemToStreamEdges.put(system, streamEdge);
+    }
+
+    // Fetch partition count for every set of StreamEdges belonging to a particular system.
+    for (String system : systemToStreamEdges.keySet()) {
+      Collection<StreamEdge> streamEdges = systemToStreamEdges.get(system);
+
+      // Map every stream to its corresponding StreamEdge so we can retrieve a StreamEdge given its stream.
       Map<String, StreamEdge> streamToStreamEdge = new HashMap<>();
-      // create the stream name to StreamEdge mapping for this system
-      streamEdges.forEach(streamEdge -> streamToStreamEdge.put(streamEdge.getSystemStream().getStream(), streamEdge));
-      // retrieve the partition counts for the streams in this system
-      Map<String, Integer> streamToPartitionCount = streamManager.getStreamPartitionCounts(systemName, streamToStreamEdge.keySet());
-      // set the partitions of a stream to its StreamEdge
-      streamToPartitionCount.forEach((stream, partitionCount) -> {
-          streamToStreamEdge.get(stream).setPartitionCount(partitionCount);
-          log.debug("Partition count is {} for stream {}", partitionCount, stream);
-        });
-    }
-  }
-
-  /**
-   * Calculate the partitions for the input streams of join operators
-   */
-  /* package private */ static void calculateJoinInputPartitions(StreamGraphImpl streamGraph, JobGraph jobGraph) {
-    // mapping from a source stream to all join specs reachable from it
-    Multimap<OperatorSpec, StreamEdge> joinSpecToStreamEdges = HashMultimap.create();
-    // reverse mapping of the above
-    Multimap<StreamEdge, OperatorSpec> streamEdgeToJoinSpecs = HashMultimap.create();
-    // A queue of joins with known input partitions
-    Queue<OperatorSpec> joinQ = new LinkedList<>();
-    // The visited set keeps track of the join specs that have been already inserted in the queue before
-    Set<OperatorSpec> visited = new HashSet<>();
-
-    streamGraph.getInputOperators().entrySet().forEach(entry -> {
-        StreamEdge streamEdge = jobGraph.getOrCreateStreamEdge(entry.getKey());
-        // Traverses the StreamGraph to find and update mappings for all Joins reachable from this input StreamEdge
-        findReachableJoins(entry.getValue(), streamEdge, joinSpecToStreamEdges, streamEdgeToJoinSpecs,
-            joinQ, visited);
-      });
-
-    // At this point, joinQ contains joinSpecs where at least one of the input stream edge partitions is known.
-    while (!joinQ.isEmpty()) {
-      OperatorSpec join = joinQ.poll();
-      int partitions = StreamEdge.PARTITIONS_UNKNOWN;
-      // loop through the input streams to the join and find the partition count
-      for (StreamEdge edge : joinSpecToStreamEdges.get(join)) {
-        int edgePartitions = edge.getPartitionCount();
-        if (edgePartitions != StreamEdge.PARTITIONS_UNKNOWN) {
-          if (partitions == StreamEdge.PARTITIONS_UNKNOWN) {
-            //if the partition is not assigned
-            partitions = edgePartitions;
-          } else if (partitions != edgePartitions) {
-            throw  new SamzaException(String.format(
-                "Unable to resolve input partitions of stream %s for join. Expected: %d, Actual: %d",
-                edge.getFormattedSystemStream(), partitions, edgePartitions));
-          }
-        }
+      for (StreamEdge streamEdge : streamEdges) {
+        streamToStreamEdge.put(streamEdge.getSystemStream().getStream(), streamEdge);
       }
-      // assign the partition count for intermediate streams
-      for (StreamEdge edge : joinSpecToStreamEdges.get(join)) {
-        if (edge.getPartitionCount() <= 0) {
-          edge.setPartitionCount(partitions);
 
-          // find other joins can be inferred by setting this edge
-          for (OperatorSpec op : streamEdgeToJoinSpecs.get(edge)) {
-            if (!visited.contains(op)) {
-              joinQ.add(op);
-              visited.add(op);
-            }
-          }
-        }
+      // Retrieve partition count for every set of streams.
+      Set<String> streams = streamToStreamEdge.keySet();
+      Map<String, Integer> streamToPartitionCount = streamManager.getStreamPartitionCounts(system, streams);
+
+      // Retrieve StreamEdge corresponding to every stream and set partition count on it.
+      for (Map.Entry<String, Integer> entry : streamToPartitionCount.entrySet()) {
+        String stream = entry.getKey();
+        Integer partitionCount = entry.getValue();
+        streamToStreamEdge.get(stream).setPartitionCount(partitionCount);
+        log.info("Fetched partition count value {} for stream {}", partitionCount, stream);
       }
     }
-  }
-
-  /**
-   * This function traverses the {@link OperatorSpec} graph to find and update mappings for all Joins reachable
-   * from this input {@link StreamEdge}.
-   * @param operatorSpec the {@link OperatorSpec} to traverse
-   * @param sourceStreamEdge source {@link StreamEdge}
-   * @param joinSpecToStreamEdges mapping from join spec to its source {@link StreamEdge}s
-   * @param streamEdgeToJoinSpecs mapping from source {@link StreamEdge} to the join specs that consumes it
-   * @param joinQ queue that contains joinSpecs where at least one of the input stream edge partitions is known.
-   */
-  private static void findReachableJoins(OperatorSpec operatorSpec, StreamEdge sourceStreamEdge,
-      Multimap<OperatorSpec, StreamEdge> joinSpecToStreamEdges,
-      Multimap<StreamEdge, OperatorSpec> streamEdgeToJoinSpecs,
-      Queue<OperatorSpec> joinQ, Set<OperatorSpec> visited) {
-    if (operatorSpec instanceof JoinOperatorSpec) {
-      joinSpecToStreamEdges.put(operatorSpec, sourceStreamEdge);
-      streamEdgeToJoinSpecs.put(sourceStreamEdge, operatorSpec);
-
-      if (!visited.contains(operatorSpec) && sourceStreamEdge.getPartitionCount() > 0) {
-        // put the joins with known input partitions into the queue and mark as visited
-        joinQ.add(operatorSpec);
-        visited.add(operatorSpec);
-      }
-    }
-
-    Collection<OperatorSpec> registeredOperatorSpecs = operatorSpec.getRegisteredOperatorSpecs();
-    for (OperatorSpec registeredOpSpec : registeredOperatorSpecs) {
-      findReachableJoins(registeredOpSpec, sourceStreamEdge, joinSpecToStreamEdges, streamEdgeToJoinSpecs, joinQ,
-          visited);
-    }
-  }
-
-  private static void calculateIntStreamPartitions(JobGraph jobGraph, Config config) {
-    int partitions = config.getInt(JobConfig.JOB_INTERMEDIATE_STREAM_PARTITIONS(), StreamEdge.PARTITIONS_UNKNOWN);
-    if (partitions < 0) {
-      // use the following simple algo to figure out the partitions
-      // partition = MAX(MAX(Input topic partitions), MAX(Output topic partitions))
-      // partition will be further bounded by MAX_INFERRED_PARTITIONS.
-      // This is important when running in hadoop where an HDFS input can have lots of files (partitions).
-      int maxInPartitions = maxPartition(jobGraph.getSources());
-      int maxOutPartitions = maxPartition(jobGraph.getSinks());
-      partitions = Math.max(maxInPartitions, maxOutPartitions);
-
-      if (partitions > MAX_INFERRED_PARTITIONS) {
-        partitions = MAX_INFERRED_PARTITIONS;
-        log.warn(String.format("Inferred intermediate stream partition count %d is greater than the max %d. Using the max.",
-            partitions, MAX_INFERRED_PARTITIONS));
-      }
-    }
-    for (StreamEdge edge : jobGraph.getIntermediateStreamEdges()) {
-      if (edge.getPartitionCount() <= 0) {
-        edge.setPartitionCount(partitions);
-      }
-    }
-  }
-
-  private static void validatePartitions(JobGraph jobGraph) {
-    for (StreamEdge edge : jobGraph.getIntermediateStreamEdges()) {
-      if (edge.getPartitionCount() <= 0) {
-        throw new SamzaException(String.format("Failure to assign the partitions to Stream %s", edge.getFormattedSystemStream()));
-      }
-    }
-  }
-
-  /* package private */ static int maxPartition(Collection<StreamEdge> edges) {
-    return edges.stream().map(StreamEdge::getPartitionCount).reduce(Integer::max).orElse(StreamEdge.PARTITIONS_UNKNOWN);
   }
 
 }

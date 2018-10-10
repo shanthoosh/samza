@@ -32,7 +32,7 @@ class KafkaCheckpointManagerFactory extends CheckpointManagerFactory with Loggin
 
   def getCheckpointManager(config: Config, registry: MetricsRegistry): CheckpointManager = {
     val jobName = config.getName.getOrElse(throw new SamzaException("Missing job name in configs"))
-    val jobId = config.getJobId.getOrElse("1")
+    val jobId = config.getJobId
 
     val kafkaConfig = new KafkaConfig(config)
     val checkpointSystemName = kafkaConfig.getCheckpointSystem.getOrElse(
@@ -42,7 +42,7 @@ class KafkaCheckpointManagerFactory extends CheckpointManagerFactory with Loggin
       .getSystemFactory(checkpointSystemName)
       .getOrElse(throw new SamzaException("Missing configuration: " + SystemConfig.SYSTEM_FACTORY format checkpointSystemName))
 
-    val checkpointSystemFactory = Util.getObj[SystemFactory](checkpointSystemFactoryName)
+    val checkpointSystemFactory = Util.getObj(checkpointSystemFactoryName, classOf[SystemFactory])
     val checkpointTopic = KafkaUtil.getCheckpointTopic(jobName, jobId, config)
 
     info(s"Creating a KafkaCheckpointManager to consume from $checkpointTopic")

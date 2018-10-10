@@ -25,8 +25,8 @@ import org.apache.samza.container.TaskContextImpl;
 import org.apache.samza.container.TaskName;
 import org.apache.samza.job.model.ContainerModel;
 import org.apache.samza.job.model.TaskModel;
-import org.apache.samza.operators.TimerRegistry;
-import org.apache.samza.operators.functions.TimerFunction;
+import org.apache.samza.operators.Scheduler;
+import org.apache.samza.operators.functions.ScheduledFunction;
 import org.apache.samza.operators.functions.WatermarkFunction;
 import org.apache.samza.system.EndOfStreamMessage;
 import org.apache.samza.metrics.Counter;
@@ -83,6 +83,7 @@ public abstract class OperatorImpl<M, RM> {
   // watermark states
   private WatermarkStates watermarkStates;
   private TaskContext taskContext;
+  private ControlMessageSender controlMessageSender;
 
   /**
    * Initialize this {@link OperatorImpl} and its user-defined functions.
@@ -114,6 +115,7 @@ public abstract class OperatorImpl<M, RM> {
     TaskContextImpl taskContext = (TaskContextImpl) context;
     this.eosStates = (EndOfStreamStates) taskContext.fetchObject(EndOfStreamStates.class.getName());
     this.watermarkStates = (WatermarkStates) taskContext.fetchObject(WatermarkStates.class.getName());
+    this.controlMessageSender = new ControlMessageSender(taskContext.getStreamMetadataCache());
 
     if (taskContext.getJobModel() != null) {
       ContainerModel containerModel = taskContext.getJobModel().getContainers()
@@ -194,7 +196,7 @@ public abstract class OperatorImpl<M, RM> {
 
     results.forEach(rm ->
         this.registeredOperators.forEach(op ->
-            op.onMessage(rm, collector, coordinator)));    
+            op.onMessage(rm, collector, coordinator)));
 
     WatermarkFunction watermarkFn = getOperatorSpec().getWatermarkFn();
     if (watermarkFn != null) {
@@ -265,6 +267,12 @@ public abstract class OperatorImpl<M, RM> {
     SystemStream stream = ssp.getSystemStream();
     if (eosStates.isEndOfStream(stream)) {
       LOG.info("Input {} reaches the end for task {}", stream.toString(), taskName.getTaskName());
+      if (eos.getTaskName() != null) {
+        // This is the aggregation task, which already received all the eos messages from upstream
+        // broadcast the end-of-stream to all the peer partitions
+        controlMessageSender.broadcastToOtherPartitions(new EndOfStreamMessage(), ssp, collector);
+      }
+      // populate the end-of-stream through the dag
       onEndOfStream(collector, coordinator);
 
       if (eosStates.allEndOfStream()) {
@@ -320,9 +328,19 @@ public abstract class OperatorImpl<M, RM> {
     LOG.debug("Received watermark {} from {}", watermarkMessage.getTimestamp(), ssp);
     watermarkStates.update(watermarkMessage, ssp);
     long watermark = watermarkStates.getWatermark(ssp.getSystemStream());
-    if (watermark != WatermarkStates.WATERMARK_NOT_EXIST) {
+    if (currentWatermark < watermark) {
       LOG.debug("Got watermark {} from stream {}", watermark, ssp.getSystemStream());
+
+      if (watermarkMessage.getTaskName() != null) {
+        // This is the aggregation task, which already received all the watermark messages from upstream
+        // broadcast the watermark to all the peer partitions
+        controlMessageSender.broadcastToOtherPartitions(new WatermarkMessage(watermark), ssp, collector);
+      }
+      // populate the watermark through the dag
       onWatermark(watermark, collector, coordinator);
+
+      // update metrics
+      watermarkStates.updateAggregateMetric(ssp, watermark);
     }
   }
 
@@ -421,19 +439,19 @@ public abstract class OperatorImpl<M, RM> {
 
   /**
    * Returns a registry which allows registering arbitrary system-clock timer with K-typed key.
-   * The user-defined function in the operator spec needs to implement {@link TimerFunction#onTimer(Object, long)}
+   * The user-defined function in the operator spec needs to implement {@link ScheduledFunction#onCallback(Object, long)}
    * for timer notifications.
    * @param <K> key type for the timer.
-   * @return an instance of {@link TimerRegistry}
+   * @return an instance of {@link Scheduler}
    */
-  <K> TimerRegistry<K> createOperatorTimerRegistry() {
-    return new TimerRegistry<K>() {
+  <K> Scheduler<K> createOperatorScheduler() {
+    return new Scheduler<K>() {
       @Override
-      public void register(K key, long time) {
-        taskContext.registerTimer(key, time, (k, collector, coordinator) -> {
-            final TimerFunction<K, RM> timerFn = getOperatorSpec().getTimerFn();
-            if (timerFn != null) {
-              final Collection<RM> output = timerFn.onTimer(key, time);
+      public void schedule(K key, long time) {
+        taskContext.scheduleCallback(key, time, (k, collector, coordinator) -> {
+            final ScheduledFunction<K, RM> scheduledFn = getOperatorSpec().getScheduledFn();
+            if (scheduledFn != null) {
+              final Collection<RM> output = scheduledFn.onCallback(key, time);
 
               if (!output.isEmpty()) {
                 output.forEach(rm ->
@@ -442,7 +460,7 @@ public abstract class OperatorImpl<M, RM> {
               }
             } else {
               throw new SamzaException(
-                  String.format("Operator %s id %s (created at %s) must implement TimerFunction to use system timer.",
+                  String.format("Operator %s id %s (created at %s) must implement ScheduledFunction to use system timer.",
                       getOperatorSpec().getOpCode().name(), getOpImplId(), getOperatorSpec().getSourceLocation()));
             }
           });
@@ -450,7 +468,7 @@ public abstract class OperatorImpl<M, RM> {
 
       @Override
       public void delete(K key) {
-        taskContext.deleteTimer(key);
+        taskContext.deleteScheduledCallback(key);
       }
     };
   }

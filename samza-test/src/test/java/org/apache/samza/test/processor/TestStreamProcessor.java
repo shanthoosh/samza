@@ -42,7 +42,7 @@ import org.apache.samza.config.Config;
 import org.apache.samza.config.MapConfig;
 import org.apache.samza.config.ZkConfig;
 import org.apache.samza.processor.StreamProcessor;
-import org.apache.samza.processor.StreamProcessorLifecycleListener;
+import org.apache.samza.runtime.ProcessorLifecycleListener;
 import org.apache.samza.task.AsyncStreamTaskAdapter;
 import org.apache.samza.task.AsyncStreamTaskFactory;
 import org.apache.samza.task.StreamTaskFactory;
@@ -52,10 +52,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import scala.Option$;
 
-import static org.mockito.Matchers.anyObject;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 
 
 public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
@@ -67,8 +64,7 @@ public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
    * The standalone version in this test uses KafkaSystemFactory and it uses a SingleContainerGrouperFactory. Hence,
    * no matter how many tasks are present, it will always be run in a single processor instance. This simplifies testing
    */
-// TODO Fix in SAMZA-1538
-//  @Test
+  @Test
   public void testStreamProcessor() {
     final String testSystem = "test-system";
     final String inputTopic = "numbers";
@@ -89,8 +85,7 @@ public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
   /**
    * Should be able to create task instances from the provided task factory.
    */
-// TODO Fix in SAMZA-1538
-//  @Test
+  @Test
   public void testStreamProcessorWithStreamTaskFactory() {
     final String testSystem = "test-system";
     final String inputTopic = "numbers2";
@@ -109,8 +104,7 @@ public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
   /**
    * Should be able to create task instances from the provided task factory.
    */
-//  TODO Fix in SAMZA-1538
-//  @Test
+  @Test
   public void testStreamProcessorWithAsyncStreamTaskFactory() {
     final String testSystem = "test-system";
     final String inputTopic = "numbers3";
@@ -235,7 +229,7 @@ public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
     KafkaConsumer consumer;
     KafkaProducer producer;
     StreamProcessor processor;
-    StreamProcessorLifecycleListener listener;
+    ProcessorLifecycleListener listener;
 
     private TestStubs(String bootstrapServer) {
       shutdownLatch = new CountDownLatch(1);
@@ -269,13 +263,14 @@ public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
     }
 
     private void initProcessorListener() {
-      listener = mock(StreamProcessorLifecycleListener.class);
-      doNothing().when(listener).onStart();
-      doNothing().when(listener).onFailure(anyObject());
+      listener = mock(ProcessorLifecycleListener.class);
+      doNothing().when(listener).afterStart();
+      doNothing().when(listener).afterFailure(any());
       doAnswer(invocation -> {
+          // stopped successfully
           shutdownLatch.countDown();
           return null;
-        }).when(listener).onShutdown();
+        }).when(listener).afterStop();
     }
 
     private void initProducer(String bootstrapServer) {

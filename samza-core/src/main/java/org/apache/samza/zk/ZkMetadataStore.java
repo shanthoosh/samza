@@ -18,101 +18,115 @@
  */
 package org.apache.samza.zk;
 
-import org.I0Itec.zkclient.ZkClient;
-import org.apache.samza.SamzaException;
+import java.nio.charset.Charset;
+import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.I0Itec.zkclient.serialize.BytesPushThroughSerializer;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.ZkConfig;
-import org.apache.samza.container.SamzaContainerContext;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.metadatastore.MetadataStore;
-
-import java.util.Arrays;
-import java.util.Map;
+import org.apache.samza.SamzaException;
+import org.I0Itec.zkclient.ZkClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * An implementation of the {@link MetadataStore} interface where the
  * metadata of the Samza job is stored in zookeeper.
- *
- * LocationId for each task is stored in an persistent node in zookeeper.
- * Task locality is stored in the following format in zookeeper:
- *
- * - {zkBaseRootPath/$appName-$appId-$JobName-$JobId-$stageId/}
- *    - localityData
- *        - task01/
- *           locationId1 (stored as value in the task zookeeper node)
- *        - task02/
- *           locationId2 (stored as value in the task zookeeper node)
- *        ...
- *        - task0N/
- *           locationIdN (stored as value in the task zookeeper node)
- *
- * LocationId for each processor is stored in an ephemeral node in zookeeper.
- * Processor locality is stored in the following format in zookeeper:
- *
- * - {zkBaseRootPath/$appName-$appId-$JobName-$JobId-$stageId/}
- *    - processors/
- *        - processor.000001/
- *            locatoinId1 (stored as value in processor zookeeper node)
- *        - processor.000002/
- *            locationId2 (stored as value in processor zookeeper node)
- *
  */
 public class ZkMetadataStore implements MetadataStore {
 
-  private final Config config;
+  private static final Logger LOG = LoggerFactory.getLogger(ZkMetadataStore.class);
 
-  private final MetricsRegistry metricsRegistry;
+  private final ZkClient zkClient;
+  private final ZkConfig zkConfig;
+  private final String zkBaseDir;
 
-  private final ZkUtils zkUtils;
-
-  private final String storeBasePath;
-
-  public ZkMetadataStore(Config config, MetricsRegistry metricsRegistry) {
-    this.config = config;
-    this.metricsRegistry = metricsRegistry;
-    this.zkUtils = getZkUtils(this.config, this.metricsRegistry);
-    this.storeBasePath = zkUtils.getKeyBuilder().getTaskLocalityPath();
+  public ZkMetadataStore(String zkBaseDir, Config config, MetricsRegistry metricsRegistry) {
+    this.zkConfig = new ZkConfig(config);
+    this.zkClient = new ZkClient(zkConfig.getZkConnect(), zkConfig.getZkSessionTimeoutMs(), zkConfig.getZkConnectionTimeoutMs(), new BytesPushThroughSerializer());
+    this.zkBaseDir = zkBaseDir;
+    zkClient.createPersistent(zkBaseDir, true);
   }
 
-  private static ZkUtils getZkUtils(Config config, MetricsRegistry metricsRegistry) {
-    ZkConfig zkConfig = new ZkConfig(config);
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public void init() {
+    zkClient.waitUntilConnected(zkConfig.getZkConnectionTimeoutMs(), TimeUnit.MILLISECONDS);
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public byte[] get(byte[] key) {
+    return zkClient.readData(getZkPathForKey(key), true);
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public void put(byte[] key, byte[] value) {
+    String zkPath = getZkPathForKey(key);
+    zkClient.createPersistent(zkPath, true);
+    zkClient.writeData(zkPath, value);
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public void delete(byte[] key) {
+    zkClient.delete(getZkPathForKey(key));
+  }
+
+  /**
+   * {@inheritDoc}
+   * @throws SamzaException if there're exceptions reading data from zookeeper.
+   */
+  @Override
+  public Map<byte[], byte[]> all() {
     try {
-      ZkKeyBuilder keyBuilder = new ZkKeyBuilder(zkConfig.getZkCoordinatorBasePath());
-      ZkClient zkClient = new ZkClient(zkConfig.getZkConnect(), zkConfig.getZkSessionTimeoutMs(), zkConfig.getZkConnectionTimeoutMs());
-      return new ZkUtils(keyBuilder, zkClient, zkConfig.getZkConnectionTimeoutMs(), metricsRegistry);
+      List<String> zkSubDirectories = zkClient.getChildren(zkBaseDir);
+      Map<byte[], byte[]> result = new HashMap<>();
+      for (String zkSubDir : zkSubDirectories) {
+        String completeZkPath = String.format("%s/%s", zkBaseDir, zkSubDir);
+        byte[] value = zkClient.readData(completeZkPath, true);
+        if (value != null) {
+          result.put(completeZkPath.getBytes("UTF-8"), value);
+        }
+      }
+      return result;
     } catch (Exception e) {
-      // Handling exceptions thrown by ZkClient during instantiation.
-      throw new SamzaException(String.format("Exception occurred when establishing zkClient connection at: %s." , zkConfig.getZkConnect()), e);
+      String errorMsg = String.format("Error reading path: %s from zookeeper.", zkBaseDir);
+      LOG.error(errorMsg, e);
+      throw new SamzaException(errorMsg, e);
     }
   }
 
+  /**
+   * {@inheritDoc}
+   */
   @Override
-  public void init(SamzaContainerContext containerContext) {
-    zkUtils.connect();
+  public void flush() {
+    // No-op for zookeeper implementation.
   }
 
-  @Override
-  public byte[] get(byte[] key) {
-    return zkUtils.getZkClient().readData(zkUtils.getKeyBuilder().getTaskLocalityPath());
-  }
-
-  @Override
-  public void put(byte[] key, byte[] value) {
-    zkUtils.writeData(storeBasePath + Arrays.toString(key), value);
-  }
-
-  @Override
-  public void remove(byte[] key) {
-    zkUtils.getZkClient().delete(storeBasePath + Arrays.toString(key));
-  }
-
-  @Override
-  public Map<byte[], byte[]> all() {
-    return null;
-  }
-
+  /**
+   * {@inheritDoc}
+   */
   @Override
   public void close() {
-    zkUtils.close();
+    zkClient.close();
+  }
+
+  private String getZkPathForKey(byte[] key) {
+    return String.format("%s/%s", zkBaseDir, new String(key, Charset.forName("UTF-8")));
   }
 }

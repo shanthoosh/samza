@@ -30,8 +30,7 @@ import scala.collection.JavaConverters;
 import scala.runtime.AbstractFunction1;
 import java.util.concurrent.ExecutorService;
 
-import static org.apache.samza.util.Util.asScalaClock;
-
+import static org.apache.samza.util.ScalaJavaUtil.toScalaFunction;
 
 /**
  * Factory class to create runloop for a Samza task, based on the type
@@ -78,7 +77,7 @@ public class RunLoopFactory {
         maxThrottlingDelayMs,
         taskWindowMs,
         taskCommitMs,
-        asScalaClock(() -> System.nanoTime()));
+        toScalaFunction(() -> clock.nanoTime()));
     } else {
       Integer taskMaxConcurrency = config.getMaxConcurrency();
 
@@ -92,6 +91,10 @@ public class RunLoopFactory {
 
       log.info("Got callbackTimeout: {}.", callbackTimeout);
 
+      Long maxIdleMs = config.getMaxIdleMs();
+
+      log.info("Got maxIdleMs: {}.", maxIdleMs);
+
       log.info("Run loop in asynchronous mode.");
 
       return new AsyncRunLoop(
@@ -103,6 +106,7 @@ public class RunLoopFactory {
         taskCommitMs,
         callbackTimeout,
         maxThrottlingDelayMs,
+        maxIdleMs,
         containerMetrics,
         clock,
         isAsyncCommitEnabled);

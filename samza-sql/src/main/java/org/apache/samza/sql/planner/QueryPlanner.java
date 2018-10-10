@@ -55,7 +55,7 @@ import org.apache.calcite.tools.Planner;
 import org.apache.samza.SamzaException;
 import org.apache.samza.sql.data.SamzaSqlRelMessage;
 import org.apache.samza.sql.interfaces.RelSchemaProvider;
-import org.apache.samza.sql.interfaces.SqlSystemStreamConfig;
+import org.apache.samza.sql.interfaces.SqlIOConfig;
 import org.apache.samza.sql.interfaces.UdfMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,11 +72,11 @@ public class QueryPlanner {
   // Mapping between the source to the RelSchemaProvider corresponding to the source.
   private final Map<String, RelSchemaProvider> relSchemaProviders;
 
-  // Mapping between the source to the SqlSystemStreamConfig corresponding to the source.
-  private final Map<String, SqlSystemStreamConfig> systemStreamConfigBySource;
+  // Mapping between the source to the SqlIOConfig corresponding to the source.
+  private final Map<String, SqlIOConfig> systemStreamConfigBySource;
 
   public QueryPlanner(Map<String, RelSchemaProvider> relSchemaProviders,
-      Map<String, SqlSystemStreamConfig> systemStreamConfigBySource, Collection<UdfMetadata> udfMetadata) {
+      Map<String, SqlIOConfig> systemStreamConfigBySource, Collection<UdfMetadata> udfMetadata) {
     this.relSchemaProviders = relSchemaProviders;
     this.systemStreamConfigBySource = systemStreamConfigBySource;
     this.udfMetadata = udfMetadata;
@@ -88,7 +88,7 @@ public class QueryPlanner {
       CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
       SchemaPlus rootSchema = calciteConnection.getRootSchema();
 
-      for (SqlSystemStreamConfig ssc : systemStreamConfigBySource.values()) {
+      for (SqlIOConfig ssc : systemStreamConfigBySource.values()) {
         SchemaPlus previousLevelSchema = rootSchema;
         List<String> sourceParts = ssc.getSourceParts();
         RelSchemaProvider relSchemaProvider = relSchemaProviders.get(ssc.getSource());
@@ -96,7 +96,7 @@ public class QueryPlanner {
         for (int sourcePartIndex = 0; sourcePartIndex < sourceParts.size(); sourcePartIndex++) {
           String sourcePart = sourceParts.get(sourcePartIndex);
           if (sourcePartIndex < sourceParts.size() - 1) {
-            SchemaPlus sourcePartSchema = rootSchema.getSubSchema(sourcePart);
+            SchemaPlus sourcePartSchema = previousLevelSchema.getSubSchema(sourcePart);
             if (sourcePartSchema == null) {
               sourcePartSchema = previousLevelSchema.add(sourcePart, new AbstractSchema());
             }
@@ -137,8 +137,6 @@ public class QueryPlanner {
       SqlNode validatedSql = planner.validate(sql);
       RelRoot relRoot = planner.rel(validatedSql);
       LOG.info("query plan:\n" + sql.toString());
-      LOG.info("relational graph:");
-      printRelGraph(relRoot.project());
       return relRoot;
     } catch (Exception e) {
       LOG.error("Query planner failed with exception.", e);
@@ -156,11 +154,5 @@ public class QueryPlanner {
         return new RelRecordType(fieldsList);
       }
     };
-  }
-
-  private static void printRelGraph(RelNode node) {
-    RelJsonWriter jsonWriter = new RelJsonWriter();
-    node.explain(jsonWriter);
-    LOG.info(jsonWriter.asString());
   }
 }

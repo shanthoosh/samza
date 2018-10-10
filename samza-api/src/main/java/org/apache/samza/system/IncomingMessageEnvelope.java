@@ -36,6 +36,7 @@ public class IncomingMessageEnvelope {
   private final Object key;
   private final Object message;
   private final int size;
+  private long timestamp = 0L;
 
   /**
    * Constructs a new IncomingMessageEnvelope from specified components.
@@ -58,12 +59,21 @@ public class IncomingMessageEnvelope {
    * @param message A deserialized message received from the partition offset.
    * @param size size of the message and key in bytes.
    */
-  public IncomingMessageEnvelope(SystemStreamPartition systemStreamPartition, String offset, Object key, Object message, int size) {
+  public IncomingMessageEnvelope(SystemStreamPartition systemStreamPartition, String offset,
+      Object key, Object message, int size) {
     this.systemStreamPartition = systemStreamPartition;
     this.offset = offset;
     this.key = key;
     this.message = message;
     this.size = size;
+  }
+
+  public void setTimestamp(long timestamp) {
+    this.timestamp = timestamp;
+  }
+
+  public long getTimestamp() {
+    return timestamp;
   }
 
   public SystemStreamPartition getSystemStreamPartition() {

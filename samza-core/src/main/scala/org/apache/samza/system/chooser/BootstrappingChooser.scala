@@ -72,7 +72,7 @@ class BootstrappingChooser(
    * A map from system stream name to SystemAdmin that is used for
    * offset comparisons.
    */
-  systemAdmins: SystemAdmins = new SystemAdmins(new HashMap[String, SystemAdmin])) extends MessageChooser with Logging {
+  systemAdmins: SystemAdmins = SystemAdmins.empty()) extends MessageChooser with Logging {
 
   /**
    * The number of lagging partitions for each SystemStream that's behind.
@@ -196,12 +196,16 @@ class BootstrappingChooser(
           val systemStream = systemStreamPartition.getSystemStream
 
           updatedSystemStreams += systemStream -> (updatedSystemStreams.getOrElse(systemStream, 0) - 1)
-        }
 
-        // If the offset we just read is the same as the offset for the last
-        // message (newest) in this system stream partition, then we have read
-        // all messages, and can mark this SSP as bootstrapped.
-        checkOffset(systemStreamPartition, offset, OffsetType.NEWEST)
+          if (envelope.isEndOfStream) {
+            markSspAsCaughtUp(systemStreamPartition)
+          } else {
+            // If the offset we just read is the same as the offset for the last
+            // message (newest) in this system stream partition, then we have read
+            // all messages, and can mark this SSP as bootstrapped.
+            checkOffset(systemStreamPartition, offset, OffsetType.NEWEST)
+          }
+        }
       }
 
       envelope
@@ -266,21 +270,34 @@ class BootstrappingChooser(
 
     trace("Check %s offset %s against %s for %s." format (offsetType, offset, offsetToCheck, systemStreamPartition))
 
-    // The SSP is no longer lagging if the envelope's offset equals the
+    // Let's compare offset of the chosen message with offsetToCheck.
+    val comparatorResult: Integer = if (offset == null || offsetToCheck == null) {
+      -1
+    } else {
+      val systemAdmin = systemAdmins.getSystemAdmin(systemStreamPartition.getSystem)
+      systemAdmin.offsetComparator(offset, offsetToCheck)
+    }
+
+    // The SSP is no longer lagging if the envelope's offset is greater than or equal to the
     // latest offset.
-    if (offset != null && offset.equals(offsetToCheck)) {
-      laggingSystemStreamPartitions -= systemStreamPartition
-      systemStreamLagCounts += systemStream -> (systemStreamLagCounts(systemStream) - 1)
+    if (comparatorResult != null && comparatorResult.intValue() >= 0) {
+      markSspAsCaughtUp(systemStreamPartition)
+    }
+  }
 
-      debug("Bootstrap stream partition is fully caught up: %s" format systemStreamPartition)
+  private def markSspAsCaughtUp(systemStreamPartition: SystemStreamPartition) = {
+    val systemStream: SystemStream = systemStreamPartition.getSystemStream
+    laggingSystemStreamPartitions -= systemStreamPartition
+    systemStreamLagCounts += systemStream -> (systemStreamLagCounts(systemStream) - 1)
 
-      if (systemStreamLagCounts(systemStream) == 0) {
-        info("Bootstrap stream is fully caught up: %s" format systemStream)
+    debug("Bootstrap stream partition is fully caught up: %s" format systemStreamPartition)
 
-        // If the lag count is 0, then no partition for this stream is lagging
-        // (the stream has been fully caught up).
-        systemStreamLagCounts -= systemStream
-      }
+    if (systemStreamLagCounts(systemStream) == 0) {
+      info("Bootstrap stream is fully caught up: %s" format systemStream)
+
+      // If the lag count is 0, then no partition for this stream is lagging
+      // (the stream has been fully caught up).
+      systemStreamLagCounts -= systemStream
     }
   }
 

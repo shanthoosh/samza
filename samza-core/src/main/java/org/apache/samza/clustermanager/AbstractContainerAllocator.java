@@ -207,6 +207,11 @@ public abstract class AbstractContainerAllocator implements Runnable {
         preferredHost, containerID);
     resourceRequestState.addResourceRequest(request);
     state.containerRequests.incrementAndGet();
+    if (ResourceRequestState.ANY_HOST.equals(preferredHost)) {
+      state.anyHostRequests.incrementAndGet();
+    } else {
+      state.preferredHostRequests.incrementAndGet();
+    }
   }
 
   /**
@@ -235,7 +240,7 @@ public abstract class AbstractContainerAllocator implements Runnable {
    */
   private CommandBuilder getCommandBuilder(String samzaContainerId) {
     String cmdBuilderClassName = taskConfig.getCommandClass(ShellCommandBuilder.class.getName());
-    CommandBuilder cmdBuilder = (CommandBuilder) Util.getObj(cmdBuilderClassName);
+    CommandBuilder cmdBuilder = Util.getObj(cmdBuilderClassName, CommandBuilder.class);
 
     cmdBuilder.setConfig(config).setId(samzaContainerId).setUrl(state.jobModelManager.server().getUrl());
     return cmdBuilder;

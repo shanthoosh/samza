@@ -18,12 +18,14 @@
  */
 package org.apache.samza.runtime;
 
+import java.util.Objects;
+
 /**
  * Represents the physical execution environment of the StreamProcessor.
  * All the stream processors which run from a LocationId should be able to share (read/write)
  * their local state stores.
  */
-public class LocationId implements Comparable<LocationId> {
+public class LocationId {
   private final String locationId;
 
   public LocationId(String locationId) {
@@ -41,10 +43,9 @@ public class LocationId implements Comparable<LocationId> {
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-
     LocationId that = (LocationId) o;
 
-    return locationId.equals(that.locationId);
+    return Objects.equals(locationId, that.locationId);
   }
 
   @Override
@@ -55,10 +56,5 @@ public class LocationId implements Comparable<LocationId> {
   @Override
   public String toString() {
     return locationId;
-  }
-
-  @Override
-  public int compareTo(LocationId that) {
-    return locationId.compareTo(that.locationId);
   }
 }

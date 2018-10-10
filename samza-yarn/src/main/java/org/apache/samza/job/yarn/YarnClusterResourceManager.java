@@ -30,11 +30,9 @@ import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
 import org.apache.hadoop.yarn.api.records.*;
 import org.apache.hadoop.yarn.client.api.AMRMClient;
-import org.apache.hadoop.yarn.client.api.NMClient;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
 import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
@@ -79,6 +77,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class YarnClusterResourceManager extends ClusterResourceManager implements AMRMClientAsync.CallbackHandler, NMClientAsync.CallbackHandler {
 
+  private static final int PREFERRED_HOST_PRIORITY = 0;
+  private static final int ANY_HOST_PRIORITY = 1;
+
   private final String INVALID_YARN_CONTAINER_ID = "-1";
 
   /**
@@ -111,16 +112,29 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
   private final ConcurrentHashMap<SamzaResource, Container> allocatedResources = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<SamzaResourceRequest, AMRMClient.ContainerRequest> requestsMap = new ConcurrentHashMap<>();
 
-  private final ConcurrentHashMap<ContainerId, Container> containersPendingStartup = new ConcurrentHashMap<>();
-
   private final SamzaAppMasterMetrics metrics;
 
-  final AtomicBoolean started = new AtomicBoolean(false);
+  private final AtomicBoolean started = new AtomicBoolean(false);
   private final Object lock = new Object();
   private final NMClientAsync nmClientAsync;
 
   private static final Logger log = LoggerFactory.getLogger(YarnClusterResourceManager.class);
   private final Config config;
+
+  YarnClusterResourceManager(AMRMClientAsync amClientAsync, NMClientAsync nmClientAsync, Callback callback,
+      YarnAppState yarnAppState, SamzaYarnAppMasterLifecycle lifecycle, SamzaYarnAppMasterService service,
+      SamzaAppMasterMetrics metrics, YarnConfiguration yarnConfiguration, Config config) {
+    super(callback);
+    this.yarnConfiguration  = yarnConfiguration;
+    this.metrics = metrics;
+    this.yarnConfig = new YarnConfig(config);
+    this.config = config;
+    this.amClient = amClientAsync;
+    this.state = yarnAppState;
+    this.lifecycle = lifecycle;
+    this.service = service;
+    this.nmClientAsync = nmClientAsync;
+  }
 
   /**
    * Creates an YarnClusterResourceManager from config, a jobModelReader and a callback.
@@ -213,7 +227,6 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
    */
   @Override
   public void requestResources(SamzaResourceRequest resourceRequest) {
-    final int DEFAULT_PRIORITY = 0;
     log.info("Requesting resources on  " + resourceRequest.getPreferredHost() + " for container " + resourceRequest.getContainerID());
 
     int memoryMb = resourceRequest.getMemoryMB();
@@ -221,25 +234,27 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
     String containerLabel = yarnConfig.getContainerLabel();
     String preferredHost = resourceRequest.getPreferredHost();
     Resource capability = Resource.newInstance(memoryMb, cpuCores);
-    Priority priority =  Priority.newInstance(DEFAULT_PRIORITY);
 
     AMRMClient.ContainerRequest issuedRequest;
 
-    if (preferredHost.equals("ANY_HOST"))
-    {
-      log.info("Making a request for ANY_HOST " + preferredHost );
-      issuedRequest = new AMRMClient.ContainerRequest(capability, null, null, priority, true, containerLabel);
+    /*
+     * Yarn enforces these two checks:
+     *   1. ANY_HOST requests should always be made with relax-locality = true
+     *   2. A request with relax-locality = false should not be in the same priority as another with relax-locality = true
+     *
+     * Since the Samza AM makes preferred-host requests with relax-locality = false, it follows that ANY_HOST requests
+     * should specify a different priority-level. We can safely set priority of preferred-host requests to be higher than
+     * any-host requests since data-locality is critical.
+     */
+    if (preferredHost.equals("ANY_HOST")) {
+      log.info("Making a request for ANY_HOST ");
+      issuedRequest = new AMRMClient.ContainerRequest(capability, null, null,
+          Priority.newInstance(ANY_HOST_PRIORITY), true, containerLabel);
     }
-    else
-    {
+    else {
       log.info("Making a preferred host request on " + preferredHost);
-      issuedRequest = new AMRMClient.ContainerRequest(
-              capability,
-              new String[]{preferredHost},
-              null,
-              priority,
-              true,
-              containerLabel);
+      issuedRequest = new AMRMClient.ContainerRequest(capability, new String[]{preferredHost}, null,
+          Priority.newInstance(PREFERRED_HOST_PRIORITY), false, containerLabel);
     }
     //ensure that updating the state and making the request are done atomically.
     synchronized (lock) {
@@ -509,18 +524,20 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
   }
 
   @Override
-  public void onStartContainerError(ContainerId containerId, Throwable t) {
-    log.error(String.format("Container: %s could not start.", containerId), t);
+  public void onStartContainerError(ContainerId yarnContainerId, Throwable t) {
+    log.error(String.format("Yarn Container: %s could not start.", yarnContainerId), t);
 
-    Container container = containersPendingStartup.remove(containerId);
+    String samzaContainerId = getPendingSamzaContainerId(yarnContainerId);
 
-    if (container != null) {
-      SamzaResource resource = new SamzaResource(container.getResource().getVirtualCores(),
-          container.getResource().getMemory(), container.getNodeId().getHost(), containerId.toString());
-      log.info("Invoking failure callback for container: {}", containerId);
+    if (samzaContainerId != null) {
+      YarnContainer container = state.pendingYarnContainers.remove(samzaContainerId);
+      log.info("Failed Yarn Container: {} had Samza ContainerId: {} ", yarnContainerId, samzaContainerId);
+      SamzaResource resource = new SamzaResource(container.resource().getVirtualCores(),
+          container.resource().getMemory(), container.nodeId().getHost(), yarnContainerId.toString());
+      log.info("Invoking failure callback for container: {}", yarnContainerId);
       clusterManagerCallback.onStreamProcessorLaunchFailure(resource, new SamzaContainerLaunchException(t));
     } else {
-      log.info("Got an invalid notification for container: {}", containerId);
+      log.info("Got an invalid notification for container: {}", yarnContainerId);
     }
   }
 
@@ -647,6 +664,13 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
     context.setCommands(new ArrayList<String>() {{add(cmd);}});
     context.setLocalResources(localResourceMap);
 
+    if (UserGroupInformation.isSecurityEnabled()) {
+      Map<ApplicationAccessType, String> acls = yarnConfig.getYarnApplicationAcls();
+      if (!acls.isEmpty()) {
+        context.setApplicationACLs(acls);
+      }
+    }
+
     log.debug("Setting localResourceMap to {}", localResourceMap);
     log.debug("Setting context to {}", context);
 
@@ -668,7 +692,6 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
     }
     log.info("Container ID {} using environment variables: {}", samzaContainerId, sb.toString());
   }
-
 
   /**
    * Gets the environment variables from the specified {@link CommandBuilder} and escapes certain characters.
@@ -708,12 +731,11 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
   private String getPendingSamzaContainerId(ContainerId containerId) {
     for (String samzaContainerId: state.pendingYarnContainers.keySet()) {
       YarnContainer yarnContainer = state.pendingYarnContainers.get(samzaContainerId);
-      if (yarnContainer.id().equals(containerId)) {
+      if (yarnContainer != null && yarnContainer.id().equals(containerId)) {
         return samzaContainerId;
       }
     }
     return null;
   }
-
 
 }

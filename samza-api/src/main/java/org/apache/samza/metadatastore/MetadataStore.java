@@ -19,51 +19,54 @@
 package org.apache.samza.metadatastore;
 
 import org.apache.samza.annotation.InterfaceStability;
-import org.apache.samza.container.SamzaContainerContext;
-
 import java.util.Map;
 
 /**
- * Store abstraction responsible for managing the metadata of a Samza job and is agnostic of the
- * deployment model (yarn/standalone) of the Samza job.
+ * Store abstraction responsible for managing the metadata of a Samza job.
  */
 @InterfaceStability.Evolving
 public interface MetadataStore {
 
   /**
    * Initializes the metadata store, if applicable, setting up the underlying resources
-   * and connections to the store endpoints. Upon successful completion of this method,
-   * metadata store is considered available to accept the client operations.
-   *
-   * @param containerContext represents the Samza container context.
+   * and connections to the store endpoints.
    */
-  void init(SamzaContainerContext containerContext);
+  void init();
 
   /**
-   * TODO: Fix the doc.
-   * @param key denotes the key for which value has to be retrieved.
-   * @return the value.
+   * Gets the value associated with the specified {@code key}.
+   *
+   * @param key the key with which the associated value is to be fetched.
+   * @return if found, the value associated with the specified {@code key}; otherwise, {@code null}.
    */
   byte[] get(byte[] key);
 
   /**
-   * TODO: Fix the doc.
-   * @param key key to update.
-   * @param value value to update.
+   * Updates the mapping of the specified key-value pair.
+   *
+   * @param key the key with which the specified {@code value} is to be associated.
+   * @param value the value with which the specified {@code key} is to be associated.
    */
   void put(byte[] key, byte[] value);
 
   /**
-   * Removes the key from the KV store.
-   * @param key denotes the key to be deleted.
+   * Deletes the mapping for the specified {@code key} from this metadata store (if such mapping exists).
+   *
+   * @param key the key for which the mapping is to be deleted.
    */
-  void remove(byte[] key);
+  void delete(byte[] key);
 
   /**
+   * Returns all the entries in this metadata store.
    *
-   * @return all the (key, value) pairs in the store.
+   * @return all entries in this metadata store.
    */
   Map<byte[], byte[]> all();
+
+  /**
+   * Flushes the metadata store, if applicable.
+   */
+  void flush();
 
   /**
    * Closes the metadata store, if applicable, relinquishing all the underlying resources

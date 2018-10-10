@@ -19,149 +19,100 @@
 
 package org.apache.samza.test.framework;
 
-import com.google.common.collect.Iterables;
-import org.apache.samza.config.Config;
-import org.apache.samza.operators.MessageStream;
-import org.apache.samza.operators.functions.SinkFunction;
-import org.apache.samza.serializers.KVSerde;
-import org.apache.samza.serializers.Serde;
-import org.apache.samza.serializers.StringSerde;
-import org.apache.samza.system.SystemStreamPartition;
-import org.apache.samza.task.MessageCollector;
-import org.apache.samza.task.TaskContext;
-import org.apache.samza.task.TaskCoordinator;
-import org.hamcrest.Matchers;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
+import com.google.common.base.Preconditions;
+import java.time.Duration;
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
+import org.apache.samza.test.framework.system.InMemoryOutputDescriptor;
+import org.hamcrest.collection.IsIterableContainingInAnyOrder;
+import org.hamcrest.collection.IsIterableContainingInOrder;
 
 import static org.junit.Assert.assertThat;
 
+
 /**
- * An assertion on the content of a {@link MessageStream}.
- *
- * <pre>Example: {@code
- * MessageStream<String> stream = streamGraph.getInputStream("input", serde).map(some_function)...;
- * ...
- * StreamAssert.that(id, stream, stringSerde).containsInAnyOrder(Arrays.asList("a", "b", "c"));
- * }</pre>
- *
+ * Assertion utils on the content of a stream described by
+ * {@link org.apache.samza.operators.descriptors.base.stream.StreamDescriptor}.
  */
-public class StreamAssert<M> {
-  private final static Map<String, CountDownLatch> LATCHES = new ConcurrentHashMap<>();
-  private final static CountDownLatch PLACE_HOLDER = new CountDownLatch(0);
-
-  private final String id;
-  private final MessageStream<M> messageStream;
-  private final Serde<M> serde;
-  private boolean checkEachTask = false;
-
-  public static <M> StreamAssert<M> that(String id, MessageStream<M> messageStream, Serde<M> serde) {
-    return new StreamAssert<>(id, messageStream, serde);
+public class StreamAssert {
+  /**
+   * Verifies that the {@code expected} messages are present in any order in the single partition stream
+   * represented by {@code outputDescriptor}
+   *
+   * @param expected expected stream of messages
+   * @param outputDescriptor describes the stream which will be consumed to compare against expected list
+   * @param timeout maximum time to wait for consuming the stream
+   * @param <StreamMessageType> type of messages in the stream
+   * @throws InterruptedException when {@code consumeStream} is interrupted by another thread during polling messages
+   */
+  public static <StreamMessageType> void containsInAnyOrder(List<StreamMessageType> expected,
+      InMemoryOutputDescriptor<StreamMessageType> outputDescriptor, Duration timeout) throws InterruptedException {
+    Preconditions.checkNotNull(outputDescriptor);
+    assertThat(TestRunner.consumeStream(outputDescriptor, timeout)
+        .entrySet()
+        .stream()
+        .flatMap(entry -> entry.getValue().stream())
+        .collect(Collectors.toList()), IsIterableContainingInAnyOrder.containsInAnyOrder(expected.toArray()));
   }
 
-  private StreamAssert(String id, MessageStream<M> messageStream, Serde<M> serde) {
-    this.id = id;
-    this.messageStream = messageStream;
-    this.serde = serde;
-  }
-
-  public StreamAssert forEachTask() {
-    checkEachTask = true;
-    return this;
-  }
-
-  public void containsInAnyOrder(final Collection<M> expected) {
-    LATCHES.putIfAbsent(id, PLACE_HOLDER);
-    final MessageStream<M> streamToCheck = checkEachTask
-        ? messageStream
-        : messageStream
-          .partitionBy(m -> null, m -> m, KVSerde.of(new StringSerde(), serde), null)
-          .map(kv -> kv.value);
-
-    streamToCheck.sink(new CheckAgainstExpected<M>(id, expected, checkEachTask));
-  }
-
-  public static void waitForComplete() {
-    try {
-      while (!LATCHES.isEmpty()) {
-        final Set<String> ids  = new HashSet<>(LATCHES.keySet());
-        for (String id : ids) {
-          while (LATCHES.get(id) == PLACE_HOLDER) {
-            Thread.sleep(100);
-          }
-
-          final CountDownLatch latch = LATCHES.get(id);
-          if (latch != null) {
-            latch.await();
-            LATCHES.remove(id);
-          }
-        }
-      }
-    } catch (Exception e) {
-      throw new RuntimeException(e);
+  /**
+   * Verifies that the {@code expected} messages are present in any order in the multi partition stream
+   * represented by {@code outputDescriptor}
+   *
+   * @param expected map of partitionId as key and list of messages in stream as value
+   * @param outputDescriptor describes the stream which will be consumed to compare against expected partition map
+   * @param timeout maximum time to wait for consuming the stream
+   * @param <StreamMessageType>  type of messages in the stream
+   * @throws InterruptedException when {@code consumeStream} is interrupted by another thread during polling messages
+   *
+   */
+  public static <StreamMessageType> void containsInAnyOrder(Map<Integer, List<StreamMessageType>> expected,
+      InMemoryOutputDescriptor<StreamMessageType> outputDescriptor, Duration timeout) throws InterruptedException {
+    Preconditions.checkNotNull(outputDescriptor);
+    Map<Integer, List<StreamMessageType>> actual = TestRunner.consumeStream(outputDescriptor, timeout);
+    for (Integer paritionId : expected.keySet()) {
+      assertThat(actual.get(paritionId),
+          IsIterableContainingInAnyOrder.containsInAnyOrder(expected.get(paritionId).toArray()));
     }
   }
 
-  private static final class CheckAgainstExpected<M> implements SinkFunction<M> {
-    private static final long TIMEOUT = 5000L;
+  /**
+   * Verifies that the {@code expected} messages are present in order in the single partition stream
+   * represented by {@code outputDescriptor}
+   *
+   * @param expected  expected stream of messages
+   * @param outputDescriptor describes the stream which will be consumed to compare against expected list
+   * @param timeout maximum time to wait for consuming the stream
+   * @param <StreamMessageType> type of messages in the stream
+   * @throws InterruptedException when {@code consumeStream} is interrupted by another thread during polling messages
+   */
+  public static <StreamMessageType> void containsInOrder(List<StreamMessageType> expected,
+      InMemoryOutputDescriptor<StreamMessageType> outputDescriptor, Duration timeout) throws InterruptedException {
+    Preconditions.checkNotNull(outputDescriptor);
+    assertThat(TestRunner.consumeStream(outputDescriptor, timeout)
+        .entrySet()
+        .stream()
+        .flatMap(entry -> entry.getValue().stream())
+        .collect(Collectors.toList()), IsIterableContainingInOrder.contains(expected.toArray()));
+  }
 
-    private final String id;
-    private final boolean checkEachTask;
-    private final Collection<M> expected;
-
-
-    private transient Timer timer = new Timer();
-    private transient List<M> actual = Collections.synchronizedList(new ArrayList<>());
-    private transient TimerTask timerTask = new TimerTask() {
-      @Override
-      public void run() {
-        check();
-      }
-    };
-
-    CheckAgainstExpected(String id, Collection<M> expected, boolean checkEachTask) {
-      this.id = id;
-      this.expected = expected;
-      this.checkEachTask = checkEachTask;
-    }
-
-    @Override
-    public void init(Config config, TaskContext context) {
-      final SystemStreamPartition ssp = Iterables.getFirst(context.getSystemStreamPartitions(), null);
-      if (ssp == null ? false : ssp.getPartition().getPartitionId() == 0) {
-        final int count = checkEachTask ? context.getSamzaContainerContext().taskNames.size() : 1;
-        LATCHES.put(id, new CountDownLatch(count));
-        timer.schedule(timerTask, TIMEOUT);
-      }
-    }
-
-    @Override
-    public void apply(M message, MessageCollector messageCollector, TaskCoordinator taskCoordinator) {
-      actual.add(message);
-
-      if (actual.size() >= expected.size()) {
-        timerTask.cancel();
-        check();
-      }
-    }
-
-    private void check() {
-      final CountDownLatch latch = LATCHES.get(id);
-      try {
-        assertThat(actual, Matchers.containsInAnyOrder((M[]) expected.toArray()));
-      } finally {
-        latch.countDown();
-      }
+  /**
+   * Verifies that the {@code expected} messages are present in order in the multi partition stream
+   * represented by {@code outputDescriptor}
+   *
+   * @param expected map of partitionId as key and list of messages as value
+   * @param outputDescriptor describes the stream which will be consumed to compare against expected partition map
+   * @param timeout maximum time to wait for consuming the stream
+   * @param <StreamMessageType> type of messages in the stream
+   * @throws InterruptedException when {@code consumeStream} is interrupted by another thread during polling messages
+   */
+  public static <StreamMessageType> void containsInOrder(Map<Integer, List<StreamMessageType>> expected,
+      InMemoryOutputDescriptor<StreamMessageType> outputDescriptor, Duration timeout) throws InterruptedException {
+    Preconditions.checkNotNull(outputDescriptor);
+    Map<Integer, List<StreamMessageType>> actual = TestRunner.consumeStream(outputDescriptor, timeout);
+    for (Integer paritionId : expected.keySet()) {
+      assertThat(actual.get(paritionId), IsIterableContainingInOrder.contains(expected.get(paritionId).toArray()));
     }
   }
 }

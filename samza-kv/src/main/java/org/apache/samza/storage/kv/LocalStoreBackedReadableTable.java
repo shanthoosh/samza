@@ -20,11 +20,13 @@ package org.apache.samza.storage.kv;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-
-import org.apache.samza.table.ReadableTable;
+import java.util.concurrent.CompletableFuture;
 
 import com.google.common.base.Preconditions;
+import org.apache.samza.container.SamzaContainerContext;
+import org.apache.samza.table.ReadableTable;
+import org.apache.samza.table.utils.DefaultTableReadMetrics;
+import org.apache.samza.task.TaskContext;
 
 
 /**
@@ -35,11 +37,14 @@ import com.google.common.base.Preconditions;
  */
 public class LocalStoreBackedReadableTable<K, V> implements ReadableTable<K, V> {
 
-  protected KeyValueStore<K, V> kvStore;
-  protected String tableId;
+  protected final KeyValueStore<K, V> kvStore;
+  protected final String tableId;
+
+  protected DefaultTableReadMetrics readMetrics;
 
   /**
    * Constructs an instance of {@link LocalStoreBackedReadableTable}
+   * @param tableId the table Id
    * @param kvStore the backing store
    */
   public LocalStoreBackedReadableTable(String tableId, KeyValueStore<K, V> kvStore) {
@@ -49,14 +54,52 @@ public class LocalStoreBackedReadableTable<K, V> implements ReadableTable<K, V> 
     this.kvStore = kvStore;
   }
 
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public void init(SamzaContainerContext containerContext, TaskContext taskContext) {
+    readMetrics = new DefaultTableReadMetrics(containerContext, taskContext, this, tableId);
+  }
+
   @Override
   public V get(K key) {
-    return kvStore.get(key);
+    readMetrics.numGets.inc();
+    long startNs = System.nanoTime();
+    V result = kvStore.get(key);
+    readMetrics.getNs.update(System.nanoTime() - startNs);
+    return result;
+  }
+
+  @Override
+  public CompletableFuture<V> getAsync(K key) {
+    CompletableFuture<V> future = new CompletableFuture();
+    try {
+      future.complete(get(key));
+    } catch (Exception e) {
+      future.completeExceptionally(e);
+    }
+    return future;
   }
 
   @Override
   public Map<K, V> getAll(List<K> keys) {
-    return keys.stream().collect(Collectors.toMap(k -> k, k -> kvStore.get(k)));
+    readMetrics.numGetAlls.inc();
+    long startNs = System.nanoTime();
+    Map<K, V> result = kvStore.getAll(keys);
+    readMetrics.getAllNs.update(System.nanoTime() - startNs);
+    return result;
+  }
+
+  @Override
+  public CompletableFuture<Map<K, V>> getAllAsync(List<K> keys) {
+    CompletableFuture<Map<K, V>> future = new CompletableFuture();
+    try {
+      future.complete(getAll(keys));
+    } catch (Exception e) {
+      future.completeExceptionally(e);
+    }
+    return future;
   }
 
   @Override

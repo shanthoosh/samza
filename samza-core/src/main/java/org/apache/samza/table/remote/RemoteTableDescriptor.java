@@ -19,16 +19,14 @@
 
 package org.apache.samza.table.remote;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.samza.SamzaException;
 import org.apache.samza.operators.BaseTableDescriptor;
+import org.apache.samza.serializers.KVSerde;
 import org.apache.samza.table.TableSpec;
+import org.apache.samza.table.retry.TableRetryPolicy;
+import org.apache.samza.table.utils.SerdeUtils;
 import org.apache.samza.util.EmbeddedTaggedRateLimiter;
 import org.apache.samza.util.RateLimiter;
 
@@ -45,15 +43,16 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
   /**
    * Tag to be used for provision credits for rate limiting read operations from the remote table.
    * Caller must pre-populate the credits with this tag when specifying a custom rate limiter instance
-   * through {@link RemoteTableDescriptor#withRateLimiter(RateLimiter, CreditFunction, CreditFunction)}
+   * through {@link RemoteTableDescriptor#withRateLimiter(RateLimiter, TableRateLimiter.CreditFunction,
+   * TableRateLimiter.CreditFunction)}
    */
   public static final String RL_READ_TAG = "readTag";
 
   /**
    * Tag to be used for provision credits for rate limiting write operations into the remote table.
    * Caller can optionally populate the credits with this tag when specifying a custom rate limiter instance
-   * through {@link RemoteTableDescriptor#withRateLimiter(RateLimiter, CreditFunction, CreditFunction)}
-   * and it needs the write functionality.
+   * through {@link RemoteTableDescriptor#withRateLimiter(RateLimiter, TableRateLimiter.CreditFunction,
+   * TableRateLimiter.CreditFunction)} and it needs the write functionality.
    */
   public static final String RL_WRITE_TAG = "writeTag";
 
@@ -70,15 +69,31 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
   // Rates for constructing the default rate limiter when they are non-zero
   private Map<String, Integer> tagCreditsMap = new HashMap<>();
 
-  private CreditFunction<K, V> readCreditFn;
-  private CreditFunction<K, V> writeCreditFn;
+  private TableRateLimiter.CreditFunction<K, V> readCreditFn;
+  private TableRateLimiter.CreditFunction<K, V> writeCreditFn;
+
+  private TableRetryPolicy readRetryPolicy;
+  private TableRetryPolicy writeRetryPolicy;
+
+  // By default execute future callbacks on the native client threads
+  // ie. no additional thread pool for callbacks.
+  private int asyncCallbackPoolSize = -1;
 
   /**
-   * Construct a table descriptor instance
-   * @param tableId Id of the table
+   * Constructs a table descriptor instance
+   * @param tableId Id of the table, it must confirm to pattern { @literal [\\d\\w-_]+ }
    */
   public RemoteTableDescriptor(String tableId) {
     super(tableId);
+  }
+
+  /**
+   * Constructs a table descriptor instance
+   * @param tableId Id of the table, it must confirm to pattern { @literal [\\d\\w-_]+ }
+   * @param serde the serde for key and value
+   */
+  public RemoteTableDescriptor(String tableId, KVSerde<K, V> serde) {
+    super(tableId, serde);
   }
 
   @Override
@@ -89,10 +104,10 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
     generateTableSpecConfig(tableSpecConfig);
 
     // Serialize and store reader/writer functions
-    tableSpecConfig.put(RemoteTableProvider.READ_FN, serializeObject("read function", readFn));
+    tableSpecConfig.put(RemoteTableProvider.READ_FN, SerdeUtils.serialize("read function", readFn));
 
     if (writeFn != null) {
-      tableSpecConfig.put(RemoteTableProvider.WRITE_FN, serializeObject("write function", writeFn));
+      tableSpecConfig.put(RemoteTableProvider.WRITE_FN, SerdeUtils.serialize("write function", writeFn));
     }
 
     // Serialize the rate limiter if specified
@@ -101,25 +116,37 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
     }
 
     if (rateLimiter != null) {
-      tableSpecConfig.put(RemoteTableProvider.RATE_LIMITER, serializeObject("rate limiter", rateLimiter));
+      tableSpecConfig.put(RemoteTableProvider.RATE_LIMITER, SerdeUtils.serialize("rate limiter", rateLimiter));
     }
 
     // Serialize the readCredit and writeCredit functions
     if (readCreditFn != null) {
-      tableSpecConfig.put(RemoteTableProvider.READ_CREDIT_FN, serializeObject(
+      tableSpecConfig.put(RemoteTableProvider.READ_CREDIT_FN, SerdeUtils.serialize(
           "read credit function", readCreditFn));
     }
 
     if (writeCreditFn != null) {
-      tableSpecConfig.put(RemoteTableProvider.WRITE_CREDIT_FN, serializeObject(
+      tableSpecConfig.put(RemoteTableProvider.WRITE_CREDIT_FN, SerdeUtils.serialize(
           "write credit function", writeCreditFn));
     }
+
+    if (readRetryPolicy != null) {
+      tableSpecConfig.put(RemoteTableProvider.READ_RETRY_POLICY, SerdeUtils.serialize(
+          "read retry policy", readRetryPolicy));
+    }
+
+    if (writeRetryPolicy != null) {
+      tableSpecConfig.put(RemoteTableProvider.WRITE_RETRY_POLICY, SerdeUtils.serialize(
+          "write retry policy", writeRetryPolicy));
+    }
+
+    tableSpecConfig.put(RemoteTableProvider.ASYNC_CALLBACK_POOL_SIZE, String.valueOf(asyncCallbackPoolSize));
 
     return new TableSpec(tableId, serde, RemoteTableProviderFactory.class.getName(), tableSpecConfig);
   }
 
   /**
-   * Use specified TableReadFunction with remote table.
+   * Use specified TableReadFunction with remote table and a retry policy.
    * @param readFn read function instance
    * @return this table descriptor instance
    */
@@ -130,13 +157,41 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
   }
 
   /**
-   * Use specified TableWriteFunction with remote table.
+   * Use specified TableWriteFunction with remote table and a retry policy.
    * @param writeFn write function instance
    * @return this table descriptor instance
    */
   public RemoteTableDescriptor<K, V> withWriteFunction(TableWriteFunction<K, V> writeFn) {
     Preconditions.checkNotNull(writeFn, "null write function");
     this.writeFn = writeFn;
+    return this;
+  }
+
+  /**
+   * Use specified TableReadFunction with remote table.
+   * @param readFn read function instance
+   * @param retryPolicy retry policy for the read function
+   * @return this table descriptor instance
+   */
+  public RemoteTableDescriptor<K, V> withReadFunction(TableReadFunction<K, V> readFn, TableRetryPolicy retryPolicy) {
+    Preconditions.checkNotNull(readFn, "null read function");
+    Preconditions.checkNotNull(retryPolicy, "null retry policy");
+    this.readFn = readFn;
+    this.readRetryPolicy = retryPolicy;
+    return this;
+  }
+
+  /**
+   * Use specified TableWriteFunction with remote table.
+   * @param writeFn write function instance
+   * @param retryPolicy retry policy for the write function
+   * @return this table descriptor instance
+   */
+  public RemoteTableDescriptor<K, V> withWriteFunction(TableWriteFunction<K, V> writeFn, TableRetryPolicy retryPolicy) {
+    Preconditions.checkNotNull(writeFn, "null write function");
+    Preconditions.checkNotNull(retryPolicy, "null retry policy");
+    this.writeFn = writeFn;
+    this.writeRetryPolicy = retryPolicy;
     return this;
   }
 
@@ -153,8 +208,9 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
    * @param writeCreditFn credit function for rate limiting write operations
    * @return this table descriptor instance
    */
-  public RemoteTableDescriptor<K, V> withRateLimiter(RateLimiter rateLimiter, CreditFunction<K, V> readCreditFn,
-      CreditFunction<K, V> writeCreditFn) {
+  public RemoteTableDescriptor<K, V> withRateLimiter(RateLimiter rateLimiter,
+      TableRateLimiter.CreditFunction<K, V> readCreditFn,
+      TableRateLimiter.CreditFunction<K, V> writeCreditFn) {
     Preconditions.checkNotNull(rateLimiter, "null read rate limiter");
     this.rateLimiter = rateLimiter;
     this.readCreditFn = readCreditFn;
@@ -164,7 +220,8 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
 
   /**
    * Specify the rate limit for table read operations. If the read rate limit is set with this method
-   * it is invalid to call {@link RemoteTableDescriptor#withRateLimiter(RateLimiter, CreditFunction, CreditFunction)}
+   * it is invalid to call {@link RemoteTableDescriptor#withRateLimiter(RateLimiter,
+   * TableRateLimiter.CreditFunction, TableRateLimiter.CreditFunction)}
    * and vice versa.
    * @param creditsPerSec rate limit for read operations; must be positive
    * @return this table descriptor instance
@@ -177,7 +234,8 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
 
   /**
    * Specify the rate limit for table write operations. If the write rate limit is set with this method
-   * it is invalid to call {@link RemoteTableDescriptor#withRateLimiter(RateLimiter, CreditFunction, CreditFunction)}
+   * it is invalid to call {@link RemoteTableDescriptor#withRateLimiter(RateLimiter,
+   * TableRateLimiter.CreditFunction, TableRateLimiter.CreditFunction)}
    * and vice versa.
    * @param creditsPerSec rate limit for write operations; must be positive
    * @return this table descriptor instance
@@ -189,19 +247,19 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
   }
 
   /**
-   * Helper method to serialize Java objects as Base64 strings
-   * @param name name of the object (for error reporting)
-   * @param object object to be serialized
-   * @return Base64 representation of the object
+   * Specify the size of the thread pool for the executor used to execute
+   * callbacks of CompletableFutures of async Table operations. By default, these
+   * futures are completed (called) by the threads of the native store client. Depending
+   * on the implementation of the native client, it may or may not allow executing long
+   * running operations in the callbacks. This config can be used to execute the callbacks
+   * from a separate executor to decouple from the native client. If configured, this
+   * thread pool is shared by all read and write operations.
+   * @param poolSize max number of threads in the executor for async callbacks
+   * @return this table descriptor instance
    */
-  private <T> String serializeObject(String name, T object) {
-    try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        ObjectOutputStream oos = new ObjectOutputStream(baos)) {
-      oos.writeObject(object);
-      return Base64.getEncoder().encodeToString(baos.toByteArray());
-    } catch (IOException e) {
-      throw new SamzaException("Failed to serialize " + name, e);
-    }
+  public RemoteTableDescriptor<K, V> withAsyncCallbackExecutorPoolSize(int poolSize) {
+    this.asyncCallbackPoolSize = poolSize;
+    return this;
   }
 
   @Override
@@ -210,5 +268,8 @@ public class RemoteTableDescriptor<K, V> extends BaseTableDescriptor<K, V, Remot
     Preconditions.checkNotNull(readFn, "TableReadFunction is required.");
     Preconditions.checkArgument(rateLimiter == null || tagCreditsMap.isEmpty(),
         "Only one of rateLimiter instance or read/write limits can be specified");
+    // Assume callback executor pool should have no more than 20 threads
+    Preconditions.checkArgument(asyncCallbackPoolSize <= 20,
+        "too many threads for async callback executor.");
   }
 }

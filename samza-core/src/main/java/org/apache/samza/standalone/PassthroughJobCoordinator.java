@@ -33,6 +33,7 @@ import org.apache.samza.runtime.LocationId;
 import org.apache.samza.runtime.LocationIdProvider;
 import org.apache.samza.runtime.LocationIdProviderFactory;
 import org.apache.samza.runtime.ProcessorIdGenerator;
+import org.apache.samza.storage.ChangelogStreamManager;
 import org.apache.samza.system.StreamMetadataCache;
 import org.apache.samza.system.SystemAdmins;
 import org.apache.samza.util.*;
@@ -90,6 +91,8 @@ public class PassthroughJobCoordinator implements JobCoordinator {
       if (checkpointManager != null) {
         checkpointManager.createResources();
       }
+
+      ChangelogStreamManager.createChangelogStreams(config, jobModel.maxChangeLogStreamPartitions);
     } catch (Exception e) {
       LOGGER.error("Exception while trying to getJobModel.", e);
       if (coordinatorListener != null) {
@@ -98,6 +101,7 @@ public class PassthroughJobCoordinator implements JobCoordinator {
     }
     if (jobModel != null && jobModel.getContainers().containsKey(processorId)) {
       if (coordinatorListener != null) {
+        coordinatorListener.onJobModelExpired();
         coordinatorListener.onNewJobModel(processorId, jobModel);
       }
     } else {
@@ -150,7 +154,7 @@ public class PassthroughJobCoordinator implements JobCoordinator {
       return appConfig.getProcessorId();
     } else if (appConfig.getAppProcessorIdGeneratorClass() != null) {
       ProcessorIdGenerator idGenerator =
-          ClassLoaderHelper.fromClassName(appConfig.getAppProcessorIdGeneratorClass(), ProcessorIdGenerator.class);
+          Util.getObj(appConfig.getAppProcessorIdGeneratorClass(), ProcessorIdGenerator.class);
       return idGenerator.generateProcessorId(config);
     } else {
       throw new ConfigException(String

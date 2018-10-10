@@ -43,7 +43,7 @@ import org.apache.samza.metrics.JmxMetricsAccessor;
 import org.apache.samza.metrics.MetricsRegistryMap;
 import org.apache.samza.metrics.MetricsValidator;
 import org.apache.samza.storage.ChangelogStreamManager;
-import org.apache.samza.util.ClassLoaderHelper;
+import org.apache.samza.util.Util;
 import org.apache.samza.util.hadoop.HttpFileSystem;
 import org.apache.samza.util.CommandLine;
 import org.slf4j.Logger;
@@ -76,7 +76,7 @@ public class YarnJobValidationTool {
     this.config = config;
     this.client = client;
     String name = this.config.getName().get();
-    String jobId = this.config.getJobId().nonEmpty()? this.config.getJobId().get() : "1";
+    String jobId = this.config.getJobId();
     this.jobName =  name + "_" + jobId;
     this.validator = validator;
   }
@@ -157,7 +157,7 @@ public class YarnJobValidationTool {
     coordinatorStreamManager.start();
     coordinatorStreamManager.bootstrap();
     ChangelogStreamManager changelogStreamManager = new ChangelogStreamManager(coordinatorStreamManager);
-    JobModelManager jobModelManager = JobModelManager.apply(coordinatorStreamManager, changelogStreamManager.readPartitionMapping());
+    JobModelManager jobModelManager = JobModelManager.apply(coordinatorStreamManager.getConfig(), changelogStreamManager.readPartitionMapping());
     validator.init(config);
     Map<String, String> jmxUrls = jobModelManager.jobModel().getAllContainerToHostValues(SetContainerHostMapping.JMX_TUNNELING_URL_KEY);
     for (Map.Entry<String, String> entry : jmxUrls.entrySet()) {
@@ -185,7 +185,7 @@ public class YarnJobValidationTool {
     MetricsValidator validator = null;
     if (options.has(validatorOpt)) {
       String validatorClass = options.valueOf(validatorOpt);
-      validator = ClassLoaderHelper.<MetricsValidator>fromClassName(validatorClass);
+      validator = Util.getObj(validatorClass, MetricsValidator.class);
     }
 
     YarnConfiguration hadoopConfig = new YarnConfiguration();

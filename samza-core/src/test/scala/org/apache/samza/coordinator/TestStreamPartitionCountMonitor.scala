@@ -83,13 +83,13 @@ class TestStreamPartitionCountMonitor extends AssertionsForJUnit with MockitoSug
     partitionCountMonitor.updatePartitionCountMetric()
 
     assertNotNull(partitionCountMonitor.getGauges().get(inputSystemStream))
-    assertEquals(1, partitionCountMonitor.getGauges().get(inputSystemStream).getValue)
+    assertEquals(3, partitionCountMonitor.getGauges().get(inputSystemStream).getValue)
 
     assertNotNull(metrics.getGroup("job-coordinator"))
 
     val metricGroup = metrics.getGroup("job-coordinator")
     assertTrue(metricGroup.get("test-system-test-stream-partitionCount").isInstanceOf[Gauge[Int]])
-    assertEquals(1, metricGroup.get("test-system-test-stream-partitionCount").asInstanceOf[Gauge[Int]].getValue)
+    assertEquals(3, metricGroup.get("test-system-test-stream-partitionCount").asInstanceOf[Gauge[Int]].getValue)
 
     verify(mockCallback, times(1)).onSystemStreamPartitionChange(any())
 
@@ -148,13 +148,13 @@ class TestStreamPartitionCountMonitor extends AssertionsForJUnit with MockitoSug
     partitionCountMonitor.updatePartitionCountMetric()
 
     assertNotNull(partitionCountMonitor.getGauges().get(inputSystemStream))
-    assertEquals(1, partitionCountMonitor.getGauges().get(inputSystemStream).getValue)
+    assertEquals(3, partitionCountMonitor.getGauges().get(inputSystemStream).getValue)
 
     assertNotNull(metrics.getGroup("job-coordinator"))
 
     val metricGroup = metrics.getGroup("job-coordinator")
     assertTrue(metricGroup.get("test-system-test-stream-partitionCount").isInstanceOf[Gauge[Int]])
-    assertEquals(1, metricGroup.get("test-system-test-stream-partitionCount").asInstanceOf[Gauge[Int]].getValue)
+    assertEquals(3, metricGroup.get("test-system-test-stream-partitionCount").asInstanceOf[Gauge[Int]].getValue)
 
     // Make sure as long as one of the input stream topic partition change is detected, the callback is invoked
     verify(mockCallback, times(1)).onSystemStreamPartitionChange(any())
@@ -234,7 +234,7 @@ class TestStreamPartitionCountMonitor extends AssertionsForJUnit with MockitoSug
     }
   }
 
-  class MockStreamMetadataCache extends StreamMetadataCache(new SystemAdmins(new HashMap[String, SystemAdmin])) {
+  class MockStreamMetadataCache extends StreamMetadataCache(SystemAdmins.empty()) {
     /**
      * Returns metadata about each of the given streams (such as first offset, newest
      * offset, etc). If the metadata isn't in the cache, it is retrieved from the systems

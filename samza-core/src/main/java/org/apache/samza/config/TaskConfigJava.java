@@ -32,6 +32,7 @@ import org.apache.samza.checkpoint.CheckpointManagerFactory;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.system.SystemStream;
 import org.apache.samza.system.SystemStreamPartition;
+import org.apache.samza.util.StreamUtil;
 import org.apache.samza.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,7 +78,7 @@ public class TaskConfigJava extends MapConfig {
     String checkpointManagerFactoryName = getCheckpointManagerFactoryName();
     if (StringUtils.isNotBlank(checkpointManagerFactoryName)) {
       CheckpointManager checkpointManager =
-          Util.<CheckpointManagerFactory>getObj(checkpointManagerFactoryName).getCheckpointManager(this, metricsRegistry);
+          Util.getObj(checkpointManagerFactoryName, CheckpointManagerFactory.class).getCheckpointManager(this, metricsRegistry);
       return checkpointManager;
     }
     return null;
@@ -102,7 +103,7 @@ public class TaskConfigJava extends MapConfig {
       } else {
         String systemStreamName = systemStreamPartition.substring(0, hashPosition);
         String partitionSegment = systemStreamPartition.substring(hashPosition + 1);
-        SystemStream systemStream = Util.getSystemStreamFromNames(systemStreamName);
+        SystemStream systemStream = StreamUtil.getSystemStreamFromNames(systemStreamName);
 
         if (Pattern.matches(BROADCAST_STREAM_PATTERN, partitionSegment)) {
           systemStreamPartitionSet.add(new SystemStreamPartition(systemStream, new Partition(Integer.valueOf(partitionSegment))));
