@@ -34,14 +34,13 @@ import org.apache.samza.container.LocalityManager
 import org.apache.samza.container.TaskName
 import org.apache.samza.coordinator.server.HttpServer
 import org.apache.samza.coordinator.server.JobServlet
-import org.apache.samza.job.model.JobModel
-import org.apache.samza.job.model.TaskModel
-import org.apache.samza.metrics.MetricsRegistryMap
+import org.apache.samza.job.model.{ContainerModel, JobModel, TaskModel}
+import org.apache.samza.metrics.{MetricsRegistry, MetricsRegistryMap}
 import org.apache.samza.system._
 import org.apache.samza.util.Logging
 import org.apache.samza.util.Util
 import org.apache.samza.Partition
-import org.apache.samza.runtime.{LocationId, LocationIdProvider, LocationIdProviderFactory}
+import org.apache.samza.runtime.LocationId
 
 import scala.collection.JavaConverters._
 

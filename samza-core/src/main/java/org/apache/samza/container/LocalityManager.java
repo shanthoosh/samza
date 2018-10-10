@@ -104,14 +104,6 @@ public class LocalityManager {
     return Collections.unmodifiableMap(allMappings);
   }
 
-  public void close() {
-    metadataStore.close();
-  }
-
-  public TaskAssignmentManager getTaskAssignmentManager() {
-    return taskAssignmentManager;
-  }
-
   /**
    * Method to write locality information to the {@link MetadataStore}. This method is used in {@link SamzaContainer}.
    *
