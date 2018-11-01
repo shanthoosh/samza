@@ -29,10 +29,26 @@ addons:
 jdk:
   - oraclejdk8
 
-script:
-  ## travis_wait increases build idle-wait time from 10 minutes to 30 minutes.
-  - travis_wait 30 ./gradlew clean build
-  - type sonar-scanner &>/dev/null; if [ $? -eq 0 ]; then sonar-scanner; else echo "Not running sonar"; fi
+jobs:
+  include:
+    - stage: Samza test suite
+    - name: "Unit tests"
+      script:
+         ## Run the java/scala unit tests. travis_wait increases build idle-wait time from 10 minutes to 30 minutes.
+         - travis_wait 30 ./gradlew clean build
+         - type sonar-scanner &>/dev/null; if [ $? -eq 0 ]; then sonar-scanner; else echo "Not running sonar"; fi
+    - name: "Yarn integration tests"
+      script:
+         ## Run zopkio powered yarn integration tests.
+         - rm -rf /tmp/yarn-integration-tests
+         - ./bin/integration-tests.sh /tmp/yarn-integration-tests test-type=yarn-integration-tests --nopassword
+         - type sonar-scanner &>/dev/null; if [ $? -eq 0 ]; then sonar-scanner; else echo "Not running sonar"; fi
+    - name: "Standalone integration tests"
+      script:
+         ## Run zopkio powered standalone integration tests.
+         - rm -rf /tmp/standalone-integration-tests
+         - ./bin/integration-tests.sh /tmp/standalone-integration-tests test-type=standalone-integration-tests --nopassword
+         - type sonar-scanner &>/dev/null; if [ $? -eq 0 ]; then sonar-scanner; else echo "Not running sonar"; fi
 
 before_cache:
   - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock

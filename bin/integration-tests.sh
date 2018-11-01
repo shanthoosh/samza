@@ -73,22 +73,24 @@ pip install -r $SCRIPTS_DIR/requirements.txt
 
 # treat all trailing parameters (after dirname, test_type) as zopkio switches
 shift
-SWITCHES="${*:3}"
+SWITCHES="$*"
 
 # default to info-level debugging if not specified
 if [[ $SWITCHES != *"console-log-level"* ]]; then
   SWITCHES="$SWITCHES --console-log-level INFO"
 fi
 
-if [[ ${FAILURE_TEST_TYPE} == "yarn-integration-tests" ]]; then
+if [[ ${FAILURE_TEST_TYPE} == "test-type=yarn-integration-tests" ]]; then
     echo "Running yarn integration tests."
     zopkio --config-overrides remote_install_path=$ABS_TEST_DIR $SWITCHES $SCRIPTS_DIR/integration_tests.py
-elif [[ ${FAILURE_TEST_TYPE} == "standalone-integration-tests" ]]; then
+elif [[ ${FAILURE_TEST_TYPE} == "test-type=standalone-integration-tests" ]]; then
     echo "Running standalone integration tests."
     zopkio --config-overrides remote_install_path=$ABS_TEST_DIR $SWITCHES $SCRIPTS_DIR/standalone_integration_tests.py
 else
-    echo "Invalid failure test type: $FAILURE_TEST_TYPE"
-    exit -1
+    echo "Running yarn integration tests."
+    zopkio --config-overrides remote_install_path=$ABS_TEST_DIR $SCRIPTS_DIR/integration_tests.py
+    echo "Running standalone integration tests."
+    zopkio --config-overrides remote_install_path=$ABS_TEST_DIR $SCRIPTS_DIR/standalone_integration_tests.py
 fi
 
 # go back to execution directory
