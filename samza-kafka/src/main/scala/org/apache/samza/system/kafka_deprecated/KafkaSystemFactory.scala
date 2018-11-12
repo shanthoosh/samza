@@ -169,7 +169,7 @@ class KafkaSystemFactory extends SystemFactory with Logging {
   def getClientId(id: String, config: Config): String = getClientId(
     id,
     new JobConfig(config).getName.getOrElse(throw new ConfigException("Missing job name.")),
-    new JobConfig(config)getJobId)
+    new JobConfig(config).getJobId)
 
   def getClientId(id: String, jobName: String, jobId: String): String =
     "%s-%s-%s" format
