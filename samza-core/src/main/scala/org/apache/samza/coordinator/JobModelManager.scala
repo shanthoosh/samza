@@ -21,12 +21,13 @@ package org.apache.samza.coordinator
 
 import java.util
 import java.util.concurrent.atomic.AtomicReference
+
 import org.apache.samza.config._
 import org.apache.samza.config.JobConfig.Config2Job
 import org.apache.samza.config.SystemConfig.Config2System
 import org.apache.samza.config.TaskConfig.Config2Task
 import org.apache.samza.config.Config
-import org.apache.samza.container.grouper.stream.SystemStreamPartitionGrouperFactory
+import org.apache.samza.container.grouper.stream.{SSPGrouperProxy, SystemStreamPartitionGrouperFactory}
 import org.apache.samza.container.grouper.task._
 import org.apache.samza.container.LocalityManager
 import org.apache.samza.container.TaskName
@@ -73,16 +74,17 @@ object JobModelManager extends Logging {
   def apply(config: Config, changelogPartitionMapping: util.Map[TaskName, Integer], metricsRegistry: MetricsRegistry = new MetricsRegistryMap()): JobModelManager = {
     val localityManager = new LocalityManager(config, metricsRegistry)
     val taskAssignmentManager = new TaskAssignmentManager(config, metricsRegistry)
+    val taskPartitionAssignmentManager = new TaskPartitionAssignmentManager(config, metricsRegistry)
     val systemAdmins = new SystemAdmins(config)
     try {
       systemAdmins.start()
       val streamMetadataCache = new StreamMetadataCache(systemAdmins, 0)
-      val grouperMetadata: GrouperMetadata = getGrouperMetadata(config, localityManager, taskAssignmentManager)
+      val grouperMetadata: GrouperMetadata = getGrouperMetadata(config, localityManager, taskAssignmentManager, taskPartitionAssignmentManager)
 
       val jobModel: JobModel = readJobModel(config, changelogPartitionMapping, streamMetadataCache, grouperMetadata)
       jobModelRef.set(new JobModel(jobModel.getConfig, jobModel.getContainers, localityManager))
 
-      updateTaskAssignments(jobModel, taskAssignmentManager, grouperMetadata)
+      updateTaskAssignments(jobModel, taskAssignmentManager, taskPartitionAssignmentManager, grouperMetadata)
 
       val server = new HttpServer
       server.addServlet("/", new JobServlet(jobModelRef))
@@ -90,6 +92,7 @@ object JobModelManager extends Logging {
       currentJobModelManager = new JobModelManager(jobModel, server, localityManager)
       currentJobModelManager
     } finally {
+      taskPartitionAssignmentManager.close()
       taskAssignmentManager.close()
       systemAdmins.stop()
       // Not closing localityManager, since {@code ClusterBasedJobCoordinator} uses it to read container locality through {@code JobModel}.
@@ -101,9 +104,10 @@ object JobModelManager extends Logging {
     * @param config represents the configurations defined by the user.
     * @param localityManager provides the processor to host mapping persisted to the metadata store.
     * @param taskAssignmentManager provides the processor to task assignments persisted to the metadata store.
+    * @param taskPartitionAssignmentManager provides to the task to partition assignments persisted to the metadata store.
     * @return the instantiated {@see GrouperMetadata}.
     */
-  def getGrouperMetadata(config: Config, localityManager: LocalityManager, taskAssignmentManager: TaskAssignmentManager) = {
+  def getGrouperMetadata(config: Config, localityManager: LocalityManager, taskAssignmentManager: TaskAssignmentManager, taskPartitionAssignmentManager: TaskPartitionAssignmentManager) = {
     val processorLocality: util.Map[String, LocationId] = getProcessorLocality(config, localityManager)
     val taskAssignment: util.Map[String, String] = taskAssignmentManager.readTaskAssignment()
     val taskNameToProcessorId: util.Map[TaskName, String] = new util.HashMap[TaskName, String]()
@@ -117,7 +121,8 @@ object JobModelManager extends Logging {
         taskLocality.put(new TaskName(taskName), processorLocality.get(processorId))
       }
     }
-    new GrouperMetadataImpl(processorLocality, taskLocality, new util.HashMap[TaskName, util.List[SystemStreamPartition]](), taskNameToProcessorId)
+    val taskPartitionAssignments: util.Map[TaskName, util.List[SystemStreamPartition]] = taskPartitionAssignmentManager.readTaskPartitionAssignments()
+    new GrouperMetadataImpl(processorLocality, taskLocality, taskPartitionAssignments, taskNameToProcessorId)
   }
 
   /**
@@ -150,10 +155,14 @@ object JobModelManager extends Logging {
     * 2. Saves the newly generated task assignments to the storage layer through the {@param TaskAssignementManager}.
     *
     * @param jobModel              represents the {@see JobModel} of the samza job.
-    * @param taskAssignmentManager required to persist the processor to task assignments to the storage layer.
+    * @param taskAssignmentManager required to persist the processor to task assignments to metadata store.
+    * @param taskPartitionAssignmentManager required to persist the task to partition assigned to metadata store.
     * @param grouperMetadata       provides the historical metadata of the application.
     */
-  def updateTaskAssignments(jobModel: JobModel, taskAssignmentManager: TaskAssignmentManager, grouperMetadata: GrouperMetadata): Unit = {
+  def updateTaskAssignments(jobModel: JobModel,
+                            taskAssignmentManager: TaskAssignmentManager,
+                            taskPartitionAssignmentManager: TaskPartitionAssignmentManager,
+                            grouperMetadata: GrouperMetadata): Unit = {
     val taskNames: util.Set[String] = new util.HashSet[String]()
     for (container <- jobModel.getContainers.values()) {
       for (taskModel <- container.getTasks.values()) {
@@ -173,8 +182,10 @@ object JobModelManager extends Logging {
     }
 
     for (container <- jobModel.getContainers.values()) {
-      for (taskName <- container.getTasks.keySet) {
+      for ((taskName, taskModel) <- container.getTasks) {
         taskAssignmentManager.writeTaskContainerMapping(taskName.getTaskName, container.getId)
+        val ssps = new util.ArrayList[SystemStreamPartition](taskModel.getSystemStreamPartitions)
+        taskPartitionAssignmentManager.writeTaskPartitionAssignment(taskName, ssps)
       }
     }
   }
@@ -264,10 +275,16 @@ object JobModelManager extends Logging {
     configMap.put(JobConfig.PROCESSOR_LIST, String.join(",", grouperMetadata.getProcessorLocality.keySet()))
     val grouper = getSystemStreamPartitionGrouper(new MapConfig(configMap))
 
-    val groups = grouper.group(allSystemStreamPartitions)
-    info("SystemStreamPartitionGrouper %s has grouped the SystemStreamPartitions into %d tasks with the following taskNames: %s" format(grouper, groups.size(), groups.keySet()))
-
     val isHostAffinityEnabled = new ClusterManagerConfig(config).getHostAffinityEnabled
+
+    var groups: util.Map[TaskName, util.Set[SystemStreamPartition]] = null
+    if (isHostAffinityEnabled) {
+      val sspGrouperProxy: SSPGrouperProxy =  new SSPGrouperProxy(config, grouper)
+      groups = sspGrouperProxy.group(allSystemStreamPartitions, grouperMetadata)
+    } else {
+      groups = grouper.group(allSystemStreamPartitions)
+    }
+    info("SystemStreamPartitionGrouper %s has grouped the SystemStreamPartitions into %d tasks with the following taskNames: %s" format(grouper, groups.size(), groups.keySet()))
 
     // If no mappings are present(first time the job is running) we return -1, this will allow 0 to be the first change
     // mapping.

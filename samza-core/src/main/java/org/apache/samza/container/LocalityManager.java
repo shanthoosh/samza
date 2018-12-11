@@ -43,15 +43,13 @@ import org.slf4j.LoggerFactory;
 public class LocalityManager {
   private static final Logger LOG = LoggerFactory.getLogger(LocalityManager.class);
 
-  private final Config config;
-  private final Serde<String> keySerde;
   private final Serde<String> valueSerde;
   private final MetadataStore metadataStore;
 
   /**
    * Builds the LocalityManager based upon {@link Config} and {@link MetricsRegistry}.
-   * Uses {@link CoordinatorStreamKeySerde} and {@link CoordinatorStreamValueSerde} to
-   * serialize messages before reading/writing into coordinator stream.
+   * Uses the {@link CoordinatorStreamValueSerde} to serialize messages before
+   * reading/writing into coordinator stream.
    *
    * @param config the configuration required for setting up metadata store.
    * @param metricsRegistry the registry for reporting metrics.
@@ -69,15 +67,12 @@ public class LocalityManager {
    * Key and value serializer are different for yarn (uses CoordinatorStreamMessage) and standalone (native ObjectOutputStream for serialization) modes.
    * @param config the configuration required for setting up metadata store.
    * @param metricsRegistry the registry for reporting metrics.
-   * @param keySerde the key serializer.
    * @param valueSerde the value serializer.
    */
   LocalityManager(Config config, MetricsRegistry metricsRegistry, Serde<String> keySerde, Serde<String> valueSerde) {
-    this.config = config;
     MetadataStoreFactory metadataStoreFactory = Util.getObj(new JobConfig(config).getMetadataStoreFactory(), MetadataStoreFactory.class);
     this.metadataStore = metadataStoreFactory.getMetadataStore(SetContainerHostMapping.TYPE, config, metricsRegistry);
     this.metadataStore.init();
-    this.keySerde = keySerde;
     this.valueSerde = valueSerde;
   }
 
