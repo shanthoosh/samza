@@ -30,8 +30,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import kafka.admin.AdminUtils;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.calcite.plan.RelOptUtil;
+import org.apache.samza.config.JobConfig;
 import org.apache.samza.config.MapConfig;
 import org.apache.samza.serializers.JsonSerdeV2Factory;
 import org.apache.samza.sql.runner.SamzaSqlApplicationConfig;
@@ -41,6 +43,7 @@ import org.apache.samza.sql.testutil.MyTestUdf;
 import org.apache.samza.sql.testutil.SampleRelConverterFactory;
 import org.apache.samza.sql.testutil.SamzaSqlTestConfig;
 import org.apache.samza.system.OutgoingMessageEnvelope;
+import org.apache.samza.util.CoordinatorStreamUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -725,5 +728,9 @@ public class TestSamzaSqlEndToEnd extends SamzaSqlIntegrationTestHarness {
         TestAvroSystemFactory.getPageKeyGroupByResult(numMessages, pageKeys);
 
     Assert.assertEquals(expectedPageKeyCountMap, pageKeyCountMap);
+
+    JobConfig jobConfig = new JobConfig(new MapConfig(staticConfigs));
+    String coordinatorStreamName = CoordinatorStreamUtil.getCoordinatorStreamName(jobConfig.getName().get(), jobConfig.getJobId());
+    Assert.assertFalse(AdminUtils.topicExists(zkUtils(), coordinatorStreamName));
   }
 }

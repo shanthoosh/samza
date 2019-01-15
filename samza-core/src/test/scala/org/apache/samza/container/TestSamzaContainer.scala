@@ -27,10 +27,12 @@ import org.apache.samza.context.{ApplicationContainerContext, ContainerContext, 
 import org.apache.samza.coordinator.JobModelManager
 import org.apache.samza.coordinator.server.{HttpServer, JobServlet}
 import org.apache.samza.job.model.{ContainerModel, JobModel, TaskModel}
-import org.apache.samza.metrics.{Gauge, MetricsReporter, Timer}
+import org.apache.samza.metadatastore.InMemoryMetadataStore
+import org.apache.samza.metrics.{Gauge, MetricsRegistryMap, MetricsReporter, Timer}
 import org.apache.samza.storage.{ContainerStorageManager, TaskStorageManager}
 import org.apache.samza.system._
 import org.apache.samza.task.{StreamTaskFactory, TaskFactory}
+import org.apache.samza.util.NoOpMetricsRegistry
 import org.apache.samza.{Partition, SamzaContainerStatus}
 import org.junit.Assert._
 import org.junit.{Before, Test}
@@ -274,6 +276,19 @@ class TestSamzaContainer extends AssertionsForJUnit with MockitoSugar {
 
     this.samzaContainer.storeContainerLocality
     Mockito.verify(this.localityManager).writeContainerToHostMapping(any(), any())
+  }
+
+  @Test
+  def testGetStartpointManager(): Unit = {
+    this.config = new MapConfig()
+    var startpointManager = SamzaContainer.getStartPointManager(config, new MetricsRegistryMap())
+
+    assertNull(startpointManager)
+
+    this.config = new MapConfig(Map("startpoint.metadata.store.factory" -> "org.apache.samza.metadatastore.InMemoryMetadataStoreFactory"))
+    startpointManager = SamzaContainer.getStartPointManager(config, new MetricsRegistryMap())
+
+    assertNotNull(startpointManager)
   }
 
   private def setupSamzaContainer(applicationContainerContext: Option[ApplicationContainerContext]) {
