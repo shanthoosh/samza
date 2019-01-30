@@ -82,7 +82,9 @@ public class ZkBarrierForVersionUpgrade {
   private final ScheduleAfterDebounceTime debounceTimer;
 
   public enum State {
-    NEW("NEW"), TIMED_OUT("TIMED_OUT"), DONE("DONE");
+    NEW("NEW"),
+    TIMED_OUT("TIMED_OUT"),
+    DONE("DONE");
 
     private String str;
 
@@ -230,9 +232,9 @@ public class ZkBarrierForVersionUpgrade {
       State barrierState = (State) data;
       List<State> expectedBarrierStates = ImmutableList.of(State.DONE, State.TIMED_OUT);
 
-      if (barrierState != null && expectedBarrierStates.contains(barrierState)) {
+      if (expectedBarrierStates.contains(barrierState)) {
         zkUtils.unsubscribeDataChanges(barrierStatePath, this);
-        barrierListenerOptional.ifPresent(zkBarrierListener -> zkBarrierListener.onBarrierStateChanged(barrierVersion, (State) data));
+        barrierListenerOptional.ifPresent(zkBarrierListener -> zkBarrierListener.onBarrierStateChanged(barrierVersion, barrierState));
       } else {
         LOG.debug("Barrier version: {} is at state: {}. Ignoring the barrierState change notification.", barrierVersion, barrierState);
       }
