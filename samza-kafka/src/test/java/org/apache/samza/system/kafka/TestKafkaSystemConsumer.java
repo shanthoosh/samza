@@ -21,11 +21,15 @@
 
 package org.apache.samza.system.kafka;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.samza.Partition;
 import org.apache.samza.config.Config;
@@ -33,24 +37,30 @@ import org.apache.samza.config.JobConfig;
 import org.apache.samza.config.KafkaConfig;
 import org.apache.samza.config.KafkaConsumerConfig;
 import org.apache.samza.config.MapConfig;
+import org.apache.samza.startpoint.StartpointOldest;
+import org.apache.samza.startpoint.StartpointSpecific;
+import org.apache.samza.startpoint.StartpointTimestamp;
+import org.apache.samza.startpoint.StartpointUpcoming;
 import org.apache.samza.system.IncomingMessageEnvelope;
 import org.apache.samza.system.SystemStreamPartition;
+import org.apache.samza.system.kafka.KafkaSystemConsumer.KafkaStartpointRegistrationHandler;
+import org.apache.samza.testUtils.TestClock;
 import org.apache.samza.util.Clock;
 import org.apache.samza.util.NoOpMetricsRegistry;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
-
 public class TestKafkaSystemConsumer {
-  public final String TEST_SYSTEM = "test-system";
-  public final String TEST_STREAM = "test-stream";
-  public final String TEST_JOB = "test-job";
-  public final String TEST_PREFIX_ID = "testClientId";
-  public final String BOOTSTRAP_SERVER = "127.0.0.1:8888";
-  public final String FETCH_THRESHOLD_MSGS = "50000";
-  public final String FETCH_THRESHOLD_BYTES = "100000";
+  private final String TEST_SYSTEM = "test-system";
+  private final String TEST_STREAM = "test-stream";
+  private final String TEST_JOB = "test-job";
+  private final String TEST_PREFIX_ID = "testClientId";
+  private final String BOOTSTRAP_SERVER = "127.0.0.1:8888";
+  private final String FETCH_THRESHOLD_MSGS = "50000";
+  private final String FETCH_THRESHOLD_BYTES = "100000";
 
   private KafkaSystemConsumer createConsumer(String fetchMsg, String fetchBytes) {
     final Map<String, String> map = new HashMap<>();
@@ -146,13 +156,13 @@ public class TestKafkaSystemConsumer {
     consumer.start();
     consumer.messageSink.addMessage(ssp0, ime0);
     // queue for ssp0 should be full now, because we added message of size FETCH_THRESHOLD_MSGS/partitionsNum
-    Assert.assertEquals(false, consumer.messageSink.needsMoreMessages(ssp0));
+    Assert.assertFalse(consumer.messageSink.needsMoreMessages(ssp0));
     consumer.messageSink.addMessage(ssp1, ime1);
     // queue for ssp1 should be less then full now, because we added message of size (FETCH_THRESHOLD_MSGS/partitionsNum - 1)
-    Assert.assertEquals(true, consumer.messageSink.needsMoreMessages(ssp1));
+    Assert.assertTrue(consumer.messageSink.needsMoreMessages(ssp1));
     consumer.messageSink.addMessage(ssp1, ime11);
     // queue for ssp1 should full now, because we added message of size 20 on top
-    Assert.assertEquals(false, consumer.messageSink.needsMoreMessages(ssp1));
+    Assert.assertFalse(consumer.messageSink.needsMoreMessages(ssp1));
 
     Assert.assertEquals(1, consumer.getNumMessagesInQueue(ssp0));
     Assert.assertEquals(2, consumer.getNumMessagesInQueue(ssp1));
@@ -189,13 +199,13 @@ public class TestKafkaSystemConsumer {
     consumer.start();
     consumer.messageSink.addMessage(ssp0, ime0);
     // should be full by size, but not full by number of messages (1 of 2)
-    Assert.assertEquals(true, consumer.messageSink.needsMoreMessages(ssp0));
+    Assert.assertTrue(consumer.messageSink.needsMoreMessages(ssp0));
     consumer.messageSink.addMessage(ssp1, ime1);
     // not full neither by size nor by messages
-    Assert.assertEquals(true, consumer.messageSink.needsMoreMessages(ssp1));
+    Assert.assertTrue(consumer.messageSink.needsMoreMessages(ssp1));
     consumer.messageSink.addMessage(ssp1, ime11);
     // not full by size, but should be full by messages
-    Assert.assertEquals(false, consumer.messageSink.needsMoreMessages(ssp1));
+    Assert.assertFalse(consumer.messageSink.needsMoreMessages(ssp1));
 
     Assert.assertEquals(1, consumer.getNumMessagesInQueue(ssp0));
     Assert.assertEquals(2, consumer.getNumMessagesInQueue(ssp1));
@@ -203,6 +213,156 @@ public class TestKafkaSystemConsumer {
     Assert.assertEquals(ime1Size + ime11Size, consumer.getMessagesSizeInQueue(ssp1));
 
     consumer.stop();
+  }
+
+  @Test
+  public void testStartpointSpecificOffsetVisitorShouldUpdateTheFetchOffsetInConsumer() {
+    // Define dummy variables for testing.
+    final Integer testPartitionId = 0;
+    final String offset = "0";
+    final TopicPartition testTopicPartition = new TopicPartition(TEST_STREAM, testPartitionId);
+    final Partition testPartition = new Partition(testPartitionId);
+    final SystemStreamPartition testSystemStreamPartition = new SystemStreamPartition(TEST_SYSTEM, TEST_STREAM, testPartition);
+
+    final KafkaConsumer consumer = Mockito.mock(KafkaConsumer.class);
+    KafkaStartpointRegistrationHandler
+        kafkaStartpointRegistrationHandler = new KafkaSystemConsumer.KafkaStartpointRegistrationHandler(consumer);
+
+    final StartpointSpecific testStartpointSpecific = new StartpointSpecific(offset);
+
+    // Mock the consumer interactions.
+    Mockito.doNothing().when(consumer).seek(testTopicPartition, Long.valueOf(offset));
+
+    // Invoke the consumer with startpoint.
+    kafkaStartpointRegistrationHandler.visit(testSystemStreamPartition, testStartpointSpecific);
+
+    // Mock verifications.
+    Mockito.verify(consumer).seek(testTopicPartition, Long.valueOf(offset));
+  }
+
+  @Test
+  public void testStartpointTimestampVisitorShouldUpdateTheFetchOffsetInConsumer() {
+    // Define dummy variables for testing.
+    final Integer testPartitionId = 0;
+    final TopicPartition testTopicPartition = new TopicPartition(TEST_STREAM, testPartitionId);
+    final Partition testPartition = new Partition(testPartitionId);
+    final SystemStreamPartition testSystemStreamPartition = new SystemStreamPartition(TEST_SYSTEM, TEST_STREAM, testPartition);
+    final Long testTimeStamp = 10L;
+    final String testOffset = "10";
+
+    final KafkaConsumer consumer = Mockito.mock(KafkaConsumer.class);
+    KafkaStartpointRegistrationHandler
+        kafkaStartpointRegistrationHandler = new KafkaSystemConsumer.KafkaStartpointRegistrationHandler(consumer);
+
+    final StartpointTimestamp startpointTimestamp = new StartpointTimestamp(testTimeStamp);
+    final Map<TopicPartition, OffsetAndTimestamp> offsetForTimesResult = ImmutableMap.of(testTopicPartition, new OffsetAndTimestamp(Long.valueOf(testOffset), testTimeStamp));
+
+    // Mock the consumer interactions.
+    Mockito.when(consumer.offsetsForTimes(Mockito.anyMap())).thenReturn(offsetForTimesResult);
+    Mockito.doNothing().when(consumer).seek(testTopicPartition, Long.valueOf(testOffset));
+
+    kafkaStartpointRegistrationHandler.visit(testSystemStreamPartition, startpointTimestamp);
+
+    // Mock verifications.
+    Mockito.verify(consumer).seek(testTopicPartition, Long.valueOf(testOffset));
+    Mockito.verify(consumer).offsetsForTimes(Mockito.anyMap());
+  }
+
+  @Test
+  public void testStartpointOldestVisitorShouldUpdateTheFetchOffsetInConsumer() {
+    // Define dummy variables for testing.
+    final Integer testPartitionId = 0;
+    final TopicPartition testTopicPartition = new TopicPartition(TEST_STREAM, testPartitionId);
+    final Partition testPartition = new Partition(testPartitionId);
+    final SystemStreamPartition testSystemStreamPartition = new SystemStreamPartition(TEST_SYSTEM, TEST_STREAM, testPartition);
+
+    final KafkaConsumer consumer = Mockito.mock(KafkaConsumer.class);
+    final KafkaStartpointRegistrationHandler
+        kafkaStartpointRegistrationHandler = new KafkaSystemConsumer.KafkaStartpointRegistrationHandler(consumer);
+
+    final StartpointOldest testStartpointSpecific = new StartpointOldest();
+
+    // Mock the consumer interactions.
+    Mockito.doNothing().when(consumer).seekToBeginning(ImmutableList.of(testTopicPartition));
+
+    // Invoke the consumer with startpoint.
+    kafkaStartpointRegistrationHandler.visit(testSystemStreamPartition, testStartpointSpecific);
+
+    // Mock verifications.
+    Mockito.verify(consumer).seekToBeginning(ImmutableList.of(testTopicPartition));
+  }
+
+  @Test
+  public void testStartpointUpcomingVisitorShouldUpdateTheFetchOffsetInConsumer() {
+    // Define dummy variables for testing.
+    final Integer testPartitionId = 0;
+    final TopicPartition testTopicPartition = new TopicPartition(TEST_STREAM, testPartitionId);
+    final Partition testPartition = new Partition(testPartitionId);
+    final SystemStreamPartition testSystemStreamPartition = new SystemStreamPartition(TEST_SYSTEM, TEST_STREAM, testPartition);
+
+    final KafkaConsumer consumer = Mockito.mock(KafkaConsumer.class);
+    final KafkaSystemConsumer.KafkaStartpointRegistrationHandler
+        kafkaStartpointRegistrationHandler = new KafkaSystemConsumer.KafkaStartpointRegistrationHandler(consumer);
+
+    final StartpointUpcoming testStartpointSpecific = new StartpointUpcoming();
+
+    // Mock the consumer interactions.
+    Mockito.doNothing().when(consumer).seekToEnd(ImmutableList.of(testTopicPartition));
+
+    // Invoke the consumer with startpoint.
+    kafkaStartpointRegistrationHandler.visit(testSystemStreamPartition, testStartpointSpecific);
+
+    // Mock verifications.
+    Mockito.verify(consumer).seekToEnd(ImmutableList.of(testTopicPartition));
+  }
+
+  @Test
+  public void testStartInvocationAfterStartPointsRegistrationShouldInvokeTheStartPointApplyMethod() {
+    // Initialize the constants required for the test.
+    Consumer mockConsumer = Mockito.mock(Consumer.class);
+    String testSystemName = "testSystem";
+    String testStreamName = "testStream";
+    Config testConfig = new MapConfig();
+    String testClientId = "testClientId";
+    KafkaSystemConsumerMetrics kafkaSystemConsumerMetrics = new KafkaSystemConsumerMetrics(testSystemName, new NoOpMetricsRegistry());
+
+    // Test system stream partitions.
+    SystemStreamPartition testSystemStreamPartition1 = new SystemStreamPartition(testSystemName, testStreamName, new Partition(0));
+    SystemStreamPartition testSystemStreamPartition2 = new SystemStreamPartition(testSystemName, testStreamName, new Partition(1));
+    SystemStreamPartition testSystemStreamPartition3 = new SystemStreamPartition(testSystemName, testStreamName, new Partition(2));
+    SystemStreamPartition testSystemStreamPartition4 = new SystemStreamPartition(testSystemName, testStreamName, new Partition(3));
+
+    // Different kinds of {@code Startpoint}.
+    StartpointSpecific startPointSpecific = new StartpointSpecific("100");
+    StartpointTimestamp startpointTimestamp = new StartpointTimestamp(100L);
+    StartpointOldest startpointOldest = new StartpointOldest();
+    StartpointUpcoming startpointUpcoming = new StartpointUpcoming();
+
+    // Mock the visit methods of KafkaStartpointRegistrationHandler.
+    KafkaSystemConsumer.KafkaStartpointRegistrationHandler
+        mockStartPointVisitor = Mockito.mock(KafkaStartpointRegistrationHandler.class);
+    Mockito.doNothing().when(mockStartPointVisitor).visit(testSystemStreamPartition1, startPointSpecific);
+    Mockito.doNothing().when(mockStartPointVisitor).visit(testSystemStreamPartition2, startpointTimestamp);
+    Mockito.doNothing().when(mockStartPointVisitor).visit(testSystemStreamPartition3, startpointOldest);
+    Mockito.doNothing().when(mockStartPointVisitor).visit(testSystemStreamPartition4, startpointUpcoming);
+
+    // Instantiate KafkaSystemConsumer for testing.
+    KafkaSystemConsumer kafkaSystemConsumer = new KafkaSystemConsumer(mockConsumer, testSystemName, testConfig,
+                                                                      testClientId, kafkaSystemConsumerMetrics, new TestClock(), mockStartPointVisitor);
+    kafkaSystemConsumer.proxy = Mockito.mock(KafkaConsumerProxy.class);
+
+    // Invoke the KafkaSystemConsumer register API with different type of startpoints.
+    kafkaSystemConsumer.register(testSystemStreamPartition1, startPointSpecific);
+    kafkaSystemConsumer.register(testSystemStreamPartition2, startpointTimestamp);
+    kafkaSystemConsumer.register(testSystemStreamPartition3, startpointOldest);
+    kafkaSystemConsumer.register(testSystemStreamPartition4, startpointUpcoming);
+    kafkaSystemConsumer.start();
+
+    // Mock verifications.
+    Mockito.verify(mockStartPointVisitor).visit(testSystemStreamPartition1, startPointSpecific);
+    Mockito.verify(mockStartPointVisitor).visit(testSystemStreamPartition2, startpointTimestamp);
+    Mockito.verify(mockStartPointVisitor).visit(testSystemStreamPartition3, startpointOldest);
+    Mockito.verify(mockStartPointVisitor).visit(testSystemStreamPartition4, startpointUpcoming);
   }
 
   // mock kafkaConsumer and SystemConsumer
