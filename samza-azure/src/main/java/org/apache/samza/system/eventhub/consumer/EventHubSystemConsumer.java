@@ -22,6 +22,7 @@ package org.apache.samza.system.eventhub.consumer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.microsoft.azure.eventhubs.EventData;
+import com.microsoft.azure.eventhubs.EventHubClient;
 import com.microsoft.azure.eventhubs.EventHubException;
 import com.microsoft.azure.eventhubs.EventPosition;
 import com.microsoft.azure.eventhubs.PartitionReceiveHandler;
@@ -48,6 +49,11 @@ import org.apache.samza.SamzaException;
 import org.apache.samza.metrics.Counter;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.metrics.SlidingTimeWindowReservoir;
+import org.apache.samza.startpoint.StartpointOldest;
+import org.apache.samza.startpoint.StartpointSpecific;
+import org.apache.samza.startpoint.StartpointTimestamp;
+import org.apache.samza.startpoint.StartpointUpcoming;
+import org.apache.samza.startpoint.StartpointVisitor;
 import org.apache.samza.system.IncomingMessageEnvelope;
 import org.apache.samza.system.SystemStreamPartition;
 import org.apache.samza.system.eventhub.EventHubClientManager;
@@ -437,6 +443,37 @@ public class EventHubSystemConsumer extends BlockingEnvelopeMap {
   @Override
   protected BlockingQueue<IncomingMessageEnvelope> newBlockingQueue() {
     return new LinkedBlockingQueue<>(config.getConsumerBufferCapacity(systemName));
+  }
+
+  @VisibleForTesting
+  static class EventHubStartpointVisitor implements StartpointVisitor {
+
+    private final Map<SystemStreamPartition, EventHubClientManager> eventHubManagers;
+
+    EventHubStartpointVisitor(Map<SystemStreamPartition, EventHubClientManager> eventHubManagers) {
+      this.eventHubManagers = eventHubManagers;
+    }
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific) {
+      EventHubClientManager manager = eventHubManagers.get(systemStreamPartition);
+      EventHubClient eventHubClient = manager.getEventHubClient();
+    }
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
+
+    }
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
+
+    }
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
+
+    }
   }
 
   protected class PartitionReceiverHandlerImpl implements PartitionReceiveHandler {
