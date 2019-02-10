@@ -835,6 +835,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     }
 
     Assert.assertEquals(expectedTaskAssignments, actualTaskAssignments);
+    Assert.assertEquals(32, jobModel.maxChangeLogStreamPartitions);
   }
 
   /**
@@ -936,6 +937,7 @@ public class TestZkLocalApplicationRunner extends StandaloneIntegrationTestHarne
     // Validate that the new JobModel has the expected task assignments.
     actualTaskAssignments = getTaskAssignments(jobModel);
     Assert.assertEquals(expectedTaskAssignments, actualTaskAssignments);
+    Assert.assertEquals(32, jobModel.maxChangeLogStreamPartitions);
   }
 
   /**
