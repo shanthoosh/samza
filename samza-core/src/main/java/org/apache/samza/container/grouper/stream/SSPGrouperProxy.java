@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.HashSet;
 import com.google.common.base.Preconditions;
@@ -101,7 +102,7 @@ public class SSPGrouperProxy {
 
           TaskName previouslyAssignedTask = null;
           if (previousStreamPartitionCount > 0 && !currentStreamPartitionCount.equals(previousStreamPartitionCount)) {
-            LOGGER.info("Partition count of system stream: {} had changed from: {} to: {} partitions. Performing partition reassignment.", systemStream, previousStreamPartitionCount, currentStreamPartitionCount);
+            LOGGER.info("Partition count of system stream: {} had changed from: {} to: {} partitions.", systemStream, previousStreamPartitionCount, currentStreamPartitionCount);
 
             SystemStreamPartition previousSystemStreamPartition = systemStreamPartitionMapper.getPreviousSSP(currentSystemStreamPartition, previousStreamPartitionCount, currentStreamPartitionCount);
             previouslyAssignedTask = previousSSPToTask.get(previousSystemStreamPartition);
@@ -110,7 +111,7 @@ public class SSPGrouperProxy {
             previouslyAssignedTask = previousSSPToTask.get(currentSystemStreamPartition);
           }
 
-          if (previouslyAssignedTask != null) {
+          if (previouslyAssignedTask != null && !Objects.equals(previouslyAssignedTask, currentlyAssignedTask)) {
             LOGGER.info("Moving systemStreamPartition: {} from task: {} to task: {}.", currentSystemStreamPartition, currentlyAssignedTask, previouslyAssignedTask);
 
             taskToPartitionGroup.get(currentlyAssignedTask).removeSSP(currentSystemStreamPartition);
