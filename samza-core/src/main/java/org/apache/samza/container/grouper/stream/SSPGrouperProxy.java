@@ -99,18 +99,22 @@ public class SSPGrouperProxy {
           Integer previousStreamPartitionCount = previousStreamToPartitionCount.getOrDefault(systemStream, 0);
           Integer currentStreamPartitionCount = currentStreamToPartitionCount.getOrDefault(systemStream, 0);
 
+          TaskName previouslyAssignedTask = null;
           if (previousStreamPartitionCount > 0 && !currentStreamPartitionCount.equals(previousStreamPartitionCount)) {
             LOGGER.info("Partition count of system stream: {} had changed from: {} to: {} partitions. Performing partition reassignment.", systemStream, previousStreamPartitionCount, currentStreamPartitionCount);
 
             SystemStreamPartition previousSystemStreamPartition = systemStreamPartitionMapper.getPreviousSSP(currentSystemStreamPartition, previousStreamPartitionCount, currentStreamPartitionCount);
-            TaskName previouslyAssignedTask = previousSSPToTask.get(previousSystemStreamPartition);
+            previouslyAssignedTask = previousSSPToTask.get(previousSystemStreamPartition);
+          } else if (previousSSPToTask.containsKey(currentSystemStreamPartition)) {
+            // If a mapping exists for a task to system stream partition previously, move it to current task.
+            previouslyAssignedTask = previousSSPToTask.get(currentSystemStreamPartition);
+          }
 
+          if (previouslyAssignedTask != null) {
             LOGGER.info("Moving systemStreamPartition: {} from task: {} to task: {}.", currentSystemStreamPartition, currentlyAssignedTask, previouslyAssignedTask);
 
             taskToPartitionGroup.get(currentlyAssignedTask).removeSSP(currentSystemStreamPartition);
             taskToPartitionGroup.get(previouslyAssignedTask).addSSP(currentSystemStreamPartition);
-          } else {
-            LOGGER.debug("No partition change in SystemStream: {}. Skipping partition reassignment.", systemStream);
           }
         }
       }
