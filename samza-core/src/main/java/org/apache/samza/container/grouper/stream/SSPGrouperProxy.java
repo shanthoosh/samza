@@ -107,7 +107,7 @@ public class SSPGrouperProxy {
             SystemStreamPartition previousSystemStreamPartition = systemStreamPartitionMapper.getPreviousSSP(currentSystemStreamPartition, previousStreamPartitionCount, currentStreamPartitionCount);
             previouslyAssignedTask = previousSSPToTask.get(previousSystemStreamPartition);
           } else if (previousSSPToTask.containsKey(currentSystemStreamPartition)) {
-            // If a mapping exists for a task to system stream partition previously, move it to current task.
+            // If a previous mapping for a task to system stream partition exists, then move the SSP to it.
             previouslyAssignedTask = previousSSPToTask.get(currentSystemStreamPartition);
           }
 
