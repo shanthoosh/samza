@@ -29,6 +29,7 @@ import com.microsoft.azure.eventhubs.PartitionReceiver;
 import com.microsoft.azure.eventhubs.impl.ClientConstants;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,6 +49,7 @@ import org.apache.samza.SamzaException;
 import org.apache.samza.metrics.Counter;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.metrics.SlidingTimeWindowReservoir;
+import org.apache.samza.startpoint.Startpoint;
 import org.apache.samza.system.IncomingMessageEnvelope;
 import org.apache.samza.system.SystemStreamPartition;
 import org.apache.samza.system.eventhub.EventHubClientManager;
@@ -136,6 +138,8 @@ public class EventHubSystemConsumer extends BlockingEnvelopeMap {
   // should remain empty if PerPartitionConnection is true
   private final Map<String, EventHubClientManager> perStreamEventHubManagers = new ConcurrentHashMap<>();
   private final Map<SystemStreamPartition, String> streamPartitionOffsets = new ConcurrentHashMap<>();
+  private final Map<SystemStreamPartition, Startpoint> sspToStartpointMap = new HashMap<>();
+
   private final Map<String, Interceptor> interceptors;
   private final Integer prefetchCount;
   private volatile boolean isStarted = false;
@@ -196,6 +200,13 @@ public class EventHubSystemConsumer extends BlockingEnvelopeMap {
         aggReadErrors = registry.newCounter(AGGREGATE, READ_ERRORS);
       }
     }
+  }
+
+  @Override
+  public void register(SystemStreamPartition systemStreamPartition, Startpoint startpoint) {
+    super.register(systemStreamPartition, startpoint);
+    LOG.info("Attempting the registration of ssp: {}, startpoint: {}.", systemStreamPartition, startpoint);
+    sspToStartpointMap.put(systemStreamPartition, startpoint);
   }
 
   @Override
