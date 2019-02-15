@@ -294,31 +294,7 @@ public class KafkaSystemConsumer<K, V> extends BlockingEnvelopeMap implements Sy
    */
   @Override
   public void register(SystemStreamPartition systemStreamPartition, String offset) {
-    if (started.get()) {
-      String msg = String.format("%s: Trying to register partition after consumer has been started. ssp=%s", this,
-          systemStreamPartition);
-      throw new SamzaException(msg);
-    }
-
-    if (!systemStreamPartition.getSystem().equals(systemName)) {
-      LOG.warn("{}: ignoring SSP {}, because this consumer's system doesn't match.", this, systemStreamPartition);
-      return;
-    }
-    LOG.info("{}: Registering ssp = {} with offset {}", this, systemStreamPartition, offset);
-
-    super.register(systemStreamPartition, offset);
-
-    TopicPartition tp = toTopicPartition(systemStreamPartition);
-
-    topicPartitionsToSSP.put(tp, systemStreamPartition);
-
-    String existingOffset = topicPartitionsToOffset.get(tp);
-    // register the older (of the two) offset in the consumer, to guarantee we do not miss any messages.
-    if (existingOffset == null || compareOffsets(existingOffset, offset) > 0) {
-      topicPartitionsToOffset.put(tp, offset);
-    }
-
-    metrics.registerTopicAndPartition(toTopicAndPartition(tp));
+    register(systemStreamPartition, new StartpointSpecific(offset));
   }
 
   @Override

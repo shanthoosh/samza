@@ -44,7 +44,7 @@ class TestSystemConsumers {
     val envelope = new IncomingMessageEnvelope(systemStreamPartition0, "1", "k", "v")
     val consumer = new CustomPollResponseSystemConsumer(envelope)
     var now = 0L
-    val consumers = new SystemConsumers(new MockMessageChooser, Map(system -> consumer),
+    val consumers = new SystemConsumers(new MockMessageChooser, Map(system -> consumer), SystemAdmins.empty(),
                                         new SerdeManager, new SystemConsumersMetrics,
                                         SystemConsumers.DEFAULT_NO_NEW_MESSAGES_TIMEOUT,
                                         SystemConsumers.DEFAULT_DROP_SERIALIZATION_ERROR,
@@ -106,7 +106,7 @@ class TestSystemConsumers {
     val envelope = new IncomingMessageEnvelope(systemStreamPartition, "1", "k", "v")
     val consumer = new CustomPollResponseSystemConsumer(envelope)
     var now = 0
-    val consumers = new SystemConsumers(new MockMessageChooser, Map(system -> consumer),
+    val consumers = new SystemConsumers(new MockMessageChooser, Map(system -> consumer), SystemAdmins.empty(),
                                         new SerdeManager, new SystemConsumersMetrics,
                                         SystemConsumers.DEFAULT_NO_NEW_MESSAGES_TIMEOUT,
                                         SystemConsumers.DEFAULT_DROP_SERIALIZATION_ERROR,
@@ -235,7 +235,7 @@ class TestSystemConsumers {
     val serdeManager = new SerdeManager(systemMessageSerdes = systemMessageSerdes)
 
     // throw exceptions when the deserialization has error
-    val consumers = new SystemConsumers(msgChooser, consumer, serdeManager, dropDeserializationError = false)
+    val consumers = new SystemConsumers(msgChooser, consumer, SystemAdmins.empty(), serdeManager, dropDeserializationError = false)
     consumers.register(systemStreamPartition, "0", null)
     consumer(system).putBytesMessage
     consumer(system).putStringMessage
@@ -252,7 +252,7 @@ class TestSystemConsumers {
     consumers.stop
 
     // it should not throw exceptions when deserializaion fails if dropDeserializationError is set to true
-    val consumers2 = new SystemConsumers(msgChooser, consumer, serdeManager, dropDeserializationError = true)
+    val consumers2 = new SystemConsumers(msgChooser, consumer, SystemAdmins.empty(), serdeManager, dropDeserializationError = true)
     consumers2.register(systemStreamPartition, "0", null)
     consumer(system).putBytesMessage
     consumer(system).putStringMessage
@@ -300,7 +300,7 @@ class TestSystemConsumers {
     val endOfStreamEnvelope = IncomingMessageEnvelope.buildEndOfStreamEnvelope(systemStreamPartition2)
     val consumer = new CustomPollResponseSystemConsumer(normalEnvelope)
     val consumers = new SystemConsumers(new MockMessageChooser, Map(system -> consumer),
-      new SerdeManager, new SystemConsumersMetrics,
+      SystemAdmins.empty(), new SerdeManager, new SystemConsumersMetrics,
       SystemConsumers.DEFAULT_NO_NEW_MESSAGES_TIMEOUT,
       SystemConsumers.DEFAULT_DROP_SERIALIZATION_ERROR,
       SystemConsumers.DEFAULT_POLL_INTERVAL_MS, clock = () => 0)
@@ -351,7 +351,7 @@ class TestSystemConsumers {
     val consumer = Mockito.mock(classOf[SystemConsumer])
     val startpoint = Mockito.mock(classOf[Startpoint])
     val consumers = new SystemConsumers(new MockMessageChooser, Map(system -> consumer),
-      new SerdeManager, new SystemConsumersMetrics,
+      SystemAdmins.empty(), new SerdeManager, new SystemConsumersMetrics,
       SystemConsumers.DEFAULT_NO_NEW_MESSAGES_TIMEOUT,
       SystemConsumers.DEFAULT_DROP_SERIALIZATION_ERROR,
       SystemConsumers.DEFAULT_POLL_INTERVAL_MS, clock = () => 0)
@@ -408,6 +408,6 @@ class TestSystemConsumers {
 
 object TestSystemConsumers {
   def getSystemConsumers(consumers: java.util.Map[String, SystemConsumer]) : SystemConsumers = {
-    new SystemConsumers(new DefaultChooser, consumers.asScala.toMap)
+    new SystemConsumers(new DefaultChooser, consumers.asScala.toMap,  SystemAdmins.empty())
   }
 }
