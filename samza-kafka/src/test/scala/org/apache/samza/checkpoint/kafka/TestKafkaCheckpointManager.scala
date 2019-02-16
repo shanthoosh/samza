@@ -119,12 +119,17 @@ class TestKafkaCheckpointManager extends KafkaServerTestHarness {
 
     zkClient.close
 
+    println("here-12")
+
     // read before topic exists should result in a null checkpoint
     val readCp = readCheckpoint(checkpointTopic, taskName)
     assertNull(readCp)
 
+    println("here-123")
     writeCheckpoint(checkpointTopic, taskName, checkpoint1)
     assertEquals(checkpoint1, readCheckpoint(checkpointTopic, taskName))
+
+    println("here-1234")
 
     // writing a second message and reading it returns a more recent checkpoint
     writeCheckpoint(checkpointTopic, taskName, checkpoint2)
