@@ -20,6 +20,7 @@
 package org.apache.samza.system.eventhub.consumer;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.microsoft.azure.eventhubs.EventData;
 import com.microsoft.azure.eventhubs.EventHubException;
@@ -29,6 +30,7 @@ import com.microsoft.azure.eventhubs.PartitionReceiver;
 import com.microsoft.azure.eventhubs.impl.ClientConstants;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,6 +50,13 @@ import org.apache.samza.SamzaException;
 import org.apache.samza.metrics.Counter;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.metrics.SlidingTimeWindowReservoir;
+import org.apache.samza.startpoint.Startpoint;
+import org.apache.samza.startpoint.StartpointCustom;
+import org.apache.samza.startpoint.StartpointOldest;
+import org.apache.samza.startpoint.StartpointSpecific;
+import org.apache.samza.startpoint.StartpointTimestamp;
+import org.apache.samza.startpoint.StartpointUpcoming;
+import org.apache.samza.startpoint.StartpointVisitor;
 import org.apache.samza.system.IncomingMessageEnvelope;
 import org.apache.samza.system.SystemStreamPartition;
 import org.apache.samza.system.eventhub.EventHubClientManager;
@@ -132,6 +141,8 @@ public class EventHubSystemConsumer extends BlockingEnvelopeMap {
   @VisibleForTesting
   final Map<SystemStreamPartition, EventHubClientManager> perPartitionEventHubManagers = new ConcurrentHashMap<>();
 
+  final Map<SystemStreamPartition, Startpoint> sspToStartpointMap = new HashMap<>();
+
   private final Map<SystemStreamPartition, PartitionReceiver> streamPartitionReceivers = new ConcurrentHashMap<>();
   // should remain empty if PerPartitionConnection is true
   private final Map<String, EventHubClientManager> perStreamEventHubManagers = new ConcurrentHashMap<>();
@@ -199,25 +210,18 @@ public class EventHubSystemConsumer extends BlockingEnvelopeMap {
   }
 
   @Override
+  public void register(SystemStreamPartition systemStreamPartition, Startpoint startpoint) {
+    Preconditions.checkState(!isStarted, String.format("Consumer has started. Registration of ssp: %s, startpoint: %s failed.", systemStreamPartition, startpoint));
+
+    super.register(systemStreamPartition, startpoint);
+
+    LOG.info("Registering the ssp: {}, startpoint: {} with eventhub consumer.", systemStreamPartition, startpoint);
+    sspToStartpointMap.put(systemStreamPartition, startpoint);
+  }
+
+  @Override
   public void register(SystemStreamPartition systemStreamPartition, String offset) {
-    super.register(systemStreamPartition, offset);
-
-    LOG.info(String.format("Eventhub consumer trying to register ssp %s, offset %s", systemStreamPartition, offset));
-    if (isStarted) {
-      throw new SamzaException("Trying to add partition when the connection has already started.");
-    }
-
-    if (streamPartitionOffsets.containsKey(systemStreamPartition)) {
-      // Only update if new offset is lower than previous offset
-      if (END_OF_STREAM.equals(offset)) {
-        return;
-      }
-      String prevOffset = streamPartitionOffsets.get(systemStreamPartition);
-      if (!END_OF_STREAM.equals(prevOffset) && EventHubSystemAdmin.compareOffsets(offset, prevOffset) > -1) {
-        return;
-      }
-    }
-    streamPartitionOffsets.put(systemStreamPartition, offset);
+    sspToStartpointMap.put(systemStreamPartition, new StartpointSpecific(offset));
   }
 
   // Based on the config PerPartitionConnection, create or get EventHubClientManager for the SSP
@@ -530,6 +534,34 @@ public class EventHubSystemConsumer extends BlockingEnvelopeMap {
       LOG.error(String.format("Received non transient exception from EH client for ssp: %s", ssp), throwable);
       // Propagate non transient or unknown errors
       eventHubNonTransientError.set(throwable);
+    }
+  }
+
+  static class EventHubStartpointRegistrationHandler implements StartpointVisitor {
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific) {
+
+    }
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
+
+    }
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
+
+    }
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
+
+    }
+
+    @Override
+    public void visit(SystemStreamPartition systemStreamPartition, StartpointCustom startpointCustom) {
+
     }
   }
 }
