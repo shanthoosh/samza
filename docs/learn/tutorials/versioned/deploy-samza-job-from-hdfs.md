@@ -23,9 +23,9 @@ This tutorial uses [hello-samza](../../../startup/hello-samza/{{site.version}}/)
 
 ### Upload the package
 
-{% highlight bash %}
+```bash
 hadoop fs -put ./target/hello-samza-1.1.0-dist.tar.gz /path/for/tgz
-{% endhighlight %}
+```
 
 ### Add HDFS configuration
 
@@ -35,8 +35,8 @@ Put the hdfs-site.xml file of your cluster into ~/.samza/conf directory (The sam
 
 Change the yarn.package.path in the properties file to your HDFS location.
 
-{% highlight jproperties %}
+```jproperties 
 yarn.package.path=hdfs://<hdfs name node ip>:<hdfs name node port>/path/to/tgz
-{% endhighlight %}
+```
 
 Then you should be able to run the Samza job as described in [hello-samza](../../../startup/hello-samza/{{site.version}}/).

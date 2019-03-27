@@ -67,7 +67,7 @@ A typical TaskApplication implementation consists of the following stages:
 
 The following example TaskApplication removes page views with "bad URLs" from the input stream:
  
-{% highlight java %}
+```java
     
     public class PageViewFilter implements TaskApplication {
       @Override
@@ -94,12 +94,12 @@ The following example TaskApplication removes page views with "bad URLs" from th
       }
     }
 
-{% endhighlight %}
+```
 
 #### TaskFactory
 Your [TaskFactory](javadocs/org/apache/samza/task/TaskFactory) will be  used to create instances of your Task in each of Samza's processors. If you're implementing a StreamTask, you can provide a [StreamTaskFactory](javadocs/org/apache/samza/task/StreamTaskFactory). Similarly, if you're implementing an AsyncStreamTask, you can provide an [AsyncStreamTaskFactory](javadocs/org/apache/samza/task/AsyncStreamTaskFactory). For example:
 
-{% highlight java %}
+```java
 
     public class PageViewFilterTaskFactory implements StreamTaskFactory {
       @Override
@@ -108,7 +108,7 @@ Your [TaskFactory](javadocs/org/apache/samza/task/TaskFactory) will be  used to 
       }
     }
     
-{% endhighlight %}
+```
 
 #### Task Interfaces
 
@@ -117,7 +117,7 @@ Your processing logic can be implemented in a [StreamTask](javadocs/org/apache/s
 ##### StreamTask
 You can implement a [StreamTask](javadocs/org/apache/samza/task/StreamTask) for synchronous message processing. Samza delivers messages to the task one at a time, and considers each message to be processed when the process method call returns. For example:
 
-{% highlight java %}
+```java
 
     public class PageViewFilterTask implements StreamTask {
       @Override
@@ -130,14 +130,14 @@ You can implement a [StreamTask](javadocs/org/apache/samza/task/StreamTask) for 
       }
     }
 
-{% endhighlight %}
+```
 
 Note that synchronous message processing does not imply sequential execution. Multiple instances of your Task class implementation may still run concurrently within a container. 
 
 ##### AsyncStreamTask
 You can implement a [AsyncStreamTask](javadocs/org/apache/samza/task/AsyncStreamTask) for asynchronous message processing. This can be useful when you need to perform long running I/O operations to process a message, e.g., making an http request. For example:
 
-{% highlight java %}
+```java
 
     public class AsyncPageViewFilterTask implements AsyncStreamTask {
       @Override
@@ -151,7 +151,7 @@ You can implement a [AsyncStreamTask](javadocs/org/apache/samza/task/AsyncStream
       }
     }
 
-{% endhighlight %}
+```
 
 Samza delivers the incoming message and a [TaskCallback](javadocs/org/apache/samza/task/TaskCallback) with the processAsync() method call, and considers each message to be processed when its corresponding callback.complete() or callback.failure() has been invoked. If callback.failure() is invoked, or neither callback.complete() or callback.failure() is invoked within <code>task.callback.ms</code> milliseconds, Samza will shut down the running Container. 
 
@@ -167,46 +167,46 @@ There are a few other interfaces you can implement in your StreamTask or AsyncSt
 You can implement the [InitableTask](javadocs/org/apache/samza/task/InitableTask) interface to access the [Context](javadocs/org/apache/samza/context/Context). Context provides access to any runtime objects you need in your task,
 whether they're provided by the framework, or your own.
 
-{% highlight java %}
+```java
     
     public interface InitableTask {
       void init(Context context) throws Exception;
     }
     
-{% endhighlight %}
+```
 
 ###### ClosableTask
 You can implement the [ClosableTask](javadocs/org/apache/samza/task/ClosableTask) to clean up any runtime state during shutdown. This interface is deprecated. It's recommended to use the [ApplicationContainerContext](javadocs/org/apache/samza/context/ApplicationContainerContext) and [ApplicationTaskContext](javadocs/org/apache/samza/context/ApplicationContainerContext) APIs to manage the lifecycle of any runtime objects.
 
-{% highlight java %}
+```java
 
     public interface ClosableTask {
       void close() throws Exception;
     }
     
-{% endhighlight %}
+```
 
 ###### WindowableTask
 You can implement the [WindowableTask](javadocs/org/apache/samza/task/WindowableTask) interface to implement processing logic that is invoked periodically by the framework.
 
-{% highlight java %}
+```java
     
     public interface WindowableTask {
       void window(MessageCollector collector, TaskCoordinator coordinator) throws Exception;
     }
 
-{% endhighlight %}
+```
 
 ###### EndOfStreamListenerTask
 You can implement the [EndOfStreamListenerTask](javadocs/org/apache/samza/task/EndOfStreamListenerTask) interface to implement processing logic that is invoked when a Task Instance has reached the end of all input SystemStreamPartitions it's consuming. This is typically relevant when running Samza as a batch job.
 
-{% highlight java %}
+```java
 
     public interface EndOfStreamListenerTask {
       void onEndOfStream(MessageCollector collector, TaskCoordinator coordinator) throws Exception;
     }
     
-{% endhighlight %}
+```
 
 ### Common Operations
 
@@ -228,14 +228,14 @@ To send a message to a stream, you first create an [OutgoingMessageEnvelope](jav
 
 You can then send the OutgoingMessageEnvelope using the [MessageCollector](javadocs/org/apache/samza/task/MessageCollector) provided with the process() or processAsync() call. You **must** use the MessageCollector delivered for the message you're currently processing. Holding on to a MessageCollector and reusing it later will cause your messages to not be sent correctly.  
 
-{% highlight java %}
+```java
     
     /** When a task wishes to send a message, it uses this interface. */
     public interface MessageCollector {
       void send(OutgoingMessageEnvelope envelope);
     }
     
-{% endhighlight %}
+```
 
 #### Accessing Tables
 
@@ -249,7 +249,7 @@ In the Low Level API, you can obtain and use a Table as follows:
 
 For example:
 
-{% highlight java %}
+```java
 
     public class PageViewFilterTask implements StreamTask, InitableTask {
       private final SystemStream outputStream = new SystemStream(“kafka”, “goodPageViewEvent”);
@@ -272,13 +272,13 @@ For example:
       }
     }
 
-{% endhighlight %}
+```
 
 ### Legacy Applications
 
 For legacy Low Level API applications, you can continue specifying your system, stream and store properties along with your task.class in configuration. An incomplete example of configuration for legacy task application looks like this (see the [configuration](../jobs/configuration.html) documentation for more detail):
 
-{% highlight jproperties %}
+```jproperties
 
     # This is the Task class that Samza will instantiate when the job is run
     task.class=com.example.samza.PageViewFilterTask
@@ -296,4 +296,4 @@ For legacy Low Level API applications, you can continue specifying your system, 
     # Use the "json" serializer for messages in the "PageViewEvent" topic
     systems.kafka.streams.PageViewEvent.samza.msg.serde=json
     
-{% endhighlight %}
+```

@@ -25,10 +25,10 @@ title: How to use Samza tools
 
 Please visit the [Download page] (/startup/download) to download the Samza tools package
 
-{% highlight bash %}
+```bash
 tar -xvzf samza-tools-*.tgz
 cd samza-tools-<version>
-{% endhighlight %}
+```
 
 
 # Using Samza tools
@@ -43,7 +43,7 @@ Before you can generate kafka events, Please follow instructions [here](http://k
 
 You can follow below instructions on how to use Generate kafka events tool.
 
-{% highlight bash %}
+```bash
 
 # Usage of the tool
 
@@ -68,7 +68,7 @@ usage: Error: Missing required options: t, e
 
  ./scripts/generate-kafka-events.sh -t ProfileChangeStream -e ProfileChange 
 
-{% endhighlight %}
+```
 
 ## Samza SQL console tool
 
@@ -85,7 +85,7 @@ Samza SQL needs all the events in the topic to be uniform schema. And it also ne
 
 In the absence of schema registry, Samza SQL console tool uses the convention to identify the schemas associated with the topic. If the topic name has string "page" it assumes the topic has PageViewEvents else ProfileChangeEvents. 
 
-{% highlight bash %}
+```bash
 
 # Usage of the tool
 
@@ -94,12 +94,12 @@ usage: Error: One of the (f or s) options needs to be set
               samza-sql-console.sh
  -f,--file <SQL_FILE>   Path to the SQL file to execute.
  -s,--sql <SQL_STMT>    SQL statement to execute.
-{% endhighlight %}
+```
 
 You can run below sql commands using Samza sql console. Please make sure you are running generate-kafka-events tool to generate events into ProfileChangeStream before running the below command.
 
-{% highlight bash %}
+```bash
 # Example command to filter out all the users who have moved to LinkedIn
 ./scripts/samza-sql-console.sh --sql "Insert into log.consoleOutput select Name, OldCompany from kafka.ProfileChangeStream where NewCompany = 'LinkedIn'"
 
-{% endhighlight %}
+```

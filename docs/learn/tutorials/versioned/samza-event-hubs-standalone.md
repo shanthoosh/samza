@@ -24,11 +24,11 @@ The [hello-samza](https://github.com/apache/samza-hello-samza) project has an ex
 
 Let's get started by cloning the hello-samza project
 
-{% highlight bash %}
+```bash
 git clone https://git.apache.org/samza-hello-samza.git hello-samza
 cd hello-samza
 git checkout latest
-{% endhighlight %}
+```
 
 The project comes up with numerous examples and for this tutorial, we will pick the Azure Event Hubs demo application.
 
@@ -36,9 +36,9 @@ The project comes up with numerous examples and for this tutorial, we will pick 
 
 For our Azure application, we require [ZooKeeper](http://zookeeper.apache.org/). The hello-samza project comes with a script called "grid" to help with the environment setup
 
-{% highlight bash %}
+```bash
 ./bin/grid standalone
-{% endhighlight %}
+```
 
 This command will download, install, and start ZooKeeper and Kafka. It will also check out the latest version of Samza and build it. All package files will be put in a sub-directory called "deploy" inside hello-samza's root folder.
 
@@ -50,7 +50,7 @@ If you get a complaint that JAVA_HOME is not set, then you'll need to set it to 
 Here are the [Event Hubs descriptors](../../documentation/versioned/connectors/eventhubs.html) you must set before building the project.
 Configure these in the `src/main/java/samza/examples/AzureApplication.java` file.
 
-{% highlight java %}
+```java
  1  public void describe(StreamApplicationDescriptor appDescriptor) {
  2  // Define your system here
  3  EventHubsSystemDescriptor systemDescriptor = new EventHubsSystemDescriptor("eventhubs");
@@ -75,7 +75,7 @@ Configure these in the `src/main/java/samza/examples/AzureApplication.java` file
 22  
 23  //...
 24  }
-{% endhighlight %}
+```
 
 In the code snippet above, we create the input and output streams that can consume and produce from the configured Event Hubs entities.
 
@@ -94,9 +94,9 @@ Refer to the [Event Hubs configuration reference](../../documentation/versioned/
 
 With the environment setup complete, let's move on to building the hello-samza project. Execute the following command:
 
-{% highlight bash %}
+```bash
 ./bin/deploy.sh
-{% endhighlight %}
+```
 
 We are now all set to run the application locally.
 
@@ -104,24 +104,24 @@ We are now all set to run the application locally.
 
 In order to run the application, we will use the *run-azure-application* script.
 
-{% highlight bash %}
+```bash
 ./deploy/samza/bin/run-event-hubs-zk-application.sh
-{% endhighlight %}
+```
 
 The above command executes the helper script which invokes the *AzureZKLocalApplication* main class, which starts the *AzureApplication*. This application prints out the messages from the input stream to `stdout` and send them the output stream.
 
 The messages consumed should be printed in the following format:
-{% highlight bash %}
+```bash
 Sending: 
 Received Key: <KEY>
 Received Message: <VALUE>
-{% endhighlight %}
+```
 
 #### Shutdown
 
 This application can be shutdown by terminating the *run-azure-application* script.
 We can use the *grid* script to tear down the local environment ([Kafka](http://kafka.apache.org/) and [Zookeeper](http://zookeeper.apache.org/)).
 
-{% highlight bash %}
+```bash
 ./bin/grid stop all
-{% endhighlight %}
+```

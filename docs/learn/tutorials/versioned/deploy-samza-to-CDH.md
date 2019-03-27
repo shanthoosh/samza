@@ -25,46 +25,46 @@ The tutorial assumes you have successfully run [hello-samza](../../../startup/he
 
 We need to use a specific compile option to build hello-samza package for CDH 5.4.0
 
-{% highlight bash %}
+```bash
 mvn clean package -Dhadoop.version=cdh5.4.0
-{% endhighlight %}
+```
 
 ### Upload Package to Cluster
 
 There are a few ways of uploading the package to the cluster's HDFS. If you do not have the job package in your cluster, **scp** from you local machine to the cluster. Then run
 
-{% highlight bash %}
+```bash
 hadoop fs -put path/to/hello-samza-1.1.0-dist.tar.gz /path/for/tgz
-{% endhighlight %}
+```
 
 ### Get Deploying Scripts
 
 Untar the job package (assume you will run from the current directory)
 
-{% highlight bash %}
+```bash
 tar -xvf path/to/samza-job-package-1.1.0-dist.tar.gz -C ./
-{% endhighlight %}
+```
 
 ### Add Package Path to Properties File
 
-{% highlight bash %}
+```bash
 vim config/wikipedia-parser.properties
-{% endhighlight %}
+```
 
 Change the yarn package path:
 
-{% highlight jproperties %}
+```jproperties
 yarn.package.path=hdfs://<hdfs name node ip>:<hdfs name node port>/path/to/tgz
-{% endhighlight %}
+```
 
 ### Set Yarn Environment Variable
 
-{% highlight bash %}
+```bash
 export HADOOP_CONF_DIR=/etc/hadoop/conf
-{% endhighlight %}
+```
 
 ### Run Samza Job
 
-{% highlight bash %}
+```bash
 bin/run-job.sh --config-factory=org.apache.samza.config.factories.PropertiesConfigFactory --config-path=file://$PWD/config/wikipedia-parser.properties
-{% endhighlight %}
+```

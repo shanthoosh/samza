@@ -37,6 +37,7 @@ Starting from 2016, Samza will begin requiring JDK8 or higher. Please see [this 
 
 ### Source Releases
 
+ * [samza-sources-1.1.0.tgz](http://www.apache.org/dyn/closer.lua/samza/1.1.0)
  * [samza-sources-1.0.0.tgz](http://www.apache.org/dyn/closer.lua/samza/1.0.0)
  * [samza-sources-0.14.1.tgz](http://www.apache.org/dyn/closer.lua/samza/0.14.1)
  * [samza-sources-0.14.0.tgz](http://www.apache.org/dyn/closer.lua/samza/0.14.0)
@@ -60,7 +61,8 @@ All Samza JARs are published through [Apache's Maven repository](https://reposit
 
 A Maven-based Samza project can pull in all required dependencies Samza dependencies this XML block:
 
-{% highlight xml %}
+```xml
+
 <dependency>
   <setId>org.apache.samza</setId>
   <artifactId>samza-api</artifactId>
@@ -110,27 +112,27 @@ A Maven-based Samza project can pull in all required dependencies Samza dependen
   <version>1.1.0</version>
   <scope>runtime</scope>
 </dependency>
-{% endhighlight %}
+```
 
 Samza versions less than 0.12 should use artifacts with scala version 2.10 as suffix. For example,
 
-{% highlight xml %}
+```xml
 <dependency>
   <setId>org.apache.samza</setId>
   <artifactId>samza-yarn_2.10</artifactId>
   <version>0.11.0</version>
 </dependency>
-{% endhighlight %}
+```
 
 Samza versions less than 0.9 should include this additional dependency.
 
-{% highlight xml %}
+```xml
 <dependency>
   <setId>org.apache.samza</setId>
   <artifactId>samza-serializers_2.10</artifactId>
   <version>0.8.1</version>
 </dependency>
-{% endhighlight %}
+```
 
 [Hello Samza](/startup/hello-samza/{{site.version}}) is a working Maven project that illustrates how to build projects that have Samza jobs in them.
 
@@ -138,30 +140,30 @@ Samza versions less than 0.9 should include this additional dependency.
 
 Samza is available in the Apache Maven repository.
 
-{% highlight xml %}
+```xml
 <repository>
   <id>apache-releases</id>
   <url>https://repository.apache.org/content/groups/public</url>
 </repository>
-{% endhighlight %}
+```
 
 Snapshot builds are available in the Apache Maven snapshot repository.
 
-{% highlight xml %}
+```xml
 <repository>
   <id>apache-snapshots</id>
   <url>https://repository.apache.org/content/groups/snapshots</url>
 </repository>
-{% endhighlight %}
+```
 
 ### Checking out and Building
 
 If you're interested in working on Samza, or building the JARs from scratch, then you'll need to checkout and build the code. Samza does not have a binary release at this time. To check out and build Samza, run these commands.
 
-{% highlight bash %}
+```bash
 git clone http://git-wip-us.apache.org/repos/asf/samza.git
 cd samza
 ./gradlew clean build
-{% endhighlight %}
+```
 
 See the README.md file for details on building.

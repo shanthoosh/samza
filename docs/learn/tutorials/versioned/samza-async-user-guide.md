@@ -25,7 +25,7 @@ This tutorial provides examples and guide to use Samza asynchronous API and mult
 
 If your job process involves synchronous IO, or blocking IO, you can simply configure the Samza build-in thread pool to run your tasks in parallel. In the following example, SyncRestTask uses Jersey client to makes rest calls in each process().
 
-{% highlight java %}
+```java
 public class SyncRestTask implements StreamTask, InitableTask, ClosableTask {
   private Client client;
   private WebTarget target;
@@ -47,14 +47,14 @@ public class SyncRestTask implements StreamTask, InitableTask, ClosableTask {
     client.close();
   }
 }
-{% endhighlight %}
+```
 
 By default Samza will run this task sequentially in a single thread. In below we configure the thread pool of size 16 to run the tasks in parallel:
 
-{% highlight jproperties %}
+```jproperties
 # Thread pool to run synchronous tasks in parallel.
 job.container.thread.pool.size=16
-{% endhighlight %}
+```
 
 **NOTE:** The thread pool will be used to run all the synchronous operations of a task, including StreamTask.process(), WindowableTask.window(), and internally Task.commit(). This is for maximizing the parallelism between tasks as well as reducing the blocking time. When running tasks in multithreading, Samza still guarantees the in-order processing of the messages within a task by default.
 
@@ -62,7 +62,7 @@ job.container.thread.pool.size=16
 
 If your job process is asynchronous, e.g. making non-blocking remote IO calls, [AsyncStreamTask](/learn/documentation/{{site.version}}/api/javadocs/org/apache/samza/task/AsyncStreamTask.html) interface provides the support for it. In the following example AsyncRestTask makes asynchronous rest call and triggers callback once it's complete.
 
-{% highlight java %}
+```java
 public class AsyncRestTask implements AsyncStreamTask, InitableTask, ClosableTask {
   private Client client;
   private WebTarget target;
@@ -96,14 +96,14 @@ public class AsyncRestTask implements AsyncStreamTask, InitableTask, ClosableTas
     client.close();
   }
 }
-{% endhighlight %}
+```
 
 In the above example, the process is not complete when processAsync() returns. In the callback thread from Jersey client, we trigger [TaskCallback](/learn/documentation/{{site.version}}/api/javadocs/org/apache/samza/task/TaskCallback.html) to indicate the process is done. In order to make sure the callback will be triggered within certain time interval, e.g. 5 seconds, you can config the following property:
 
-{% highlight jproperties %}
+```jproperties
 # Timeout for processAsync() callback. When the timeout happens, it will throw a TaskCallbackTimeoutException and shut down the container.
 task.callback.timeout.ms=5000
-{% endhighlight %}
+```
 
 **NOTE:** Samza also guarantees the in-order process of the messages within an AsyncStreamTask by default, meaning the next processAsync() of a task won't be called until the previous processAsync() callback has been triggered.
 
@@ -111,10 +111,10 @@ task.callback.timeout.ms=5000
 
 In both cases above, Samza supports in-order process by default. Further parallelism is also supported by allowing a task to process multiple outstanding messages in parallel. The following config allows one task to process at most 4 outstanding messages in parallel at a time: 
 
-{% highlight jproperties %}
+```jproperties
 # Max number of outstanding messages being processed per task at a time, applicable to both StreamTask and AsyncStreamTask.
 task.max.concurrency=4
-{% endhighlight %}
+```
 
 **NOTE:** In case of AsyncStreamTask, processAsync() is still invoked in the order of the message arrivals, but the completion can go out of order. In case of StreamTask with multithreading, process() can run out-of-order since they are dispatched to a thread pool. This option should **NOT** be used when strict ordering of the output is required.
 

@@ -32,9 +32,9 @@ Take note of the path where you cloned hello-samza. You will need this to config
 
 #### Build the Samza REST Service package
 The source code for Samza REST is in the samza-rest module of the Samza repository. To build it, execute the following gradle task from the root of the project.
-{% highlight bash %}
+```bash
 ./gradlew samza-rest:clean releaseRestServiceTar
-{% endhighlight %}
+```
 
 #### Deploy the Samza REST Service Locally
 To deploy the service, you simply extract the tarball to the desired location. Here, we will deploy the tarball on the local host in
@@ -45,11 +45,11 @@ SAMZA_ROOT/samza-rest/build/distributions/deploy/samza-rest
 where ```SAMZA_ROOT``` is the path to the root of your Samza project.
 
 Run the following commands:
-{% highlight bash %}
+```bash
 cd samza-rest/build/distributions/
 mkdir -p deploy/samza-rest
 tar -xvf ./samza-rest-1.1.1-SNAPSHOT.tgz -C deploy/samza-rest
-{% endhighlight %}
+```
 
 #### Configure the Installations Path
 The JobsResource has a required config [job.installations.path](../../documentation/{{site.version}}/rest/resources/jobs.html#configuration) which specifies the path where the jobs are installed. Edit the configuration file:
@@ -68,12 +68,12 @@ where ```hello-samza-ROOT``` is the path to your hello-samza clone, noted above.
 
 #### Start the Samza REST Service
 To deploy the service, run the run-samza-rest-service.sh script from the extracted directory.
-{% highlight bash %}
+```bash
 cd deploy/samza-rest
 ./bin/run-samza-rest-service.sh  \
   --config-factory=org.apache.samza.config.factories.PropertiesConfigFactory \
   --config-path=file://$PWD/config/samza-rest.properties
-{% endhighlight %}
+```
 
 You provide two parameters to the run-samza-rest-service.sh script. One is the config location, and the other, optional, parameter is a factory class that is used to read your configuration file. The SamzaRestService uses your ConfigFactory to get a Config object from the config path. The ConfigFactory is covered in more detail on the [Job Runner page](../../documentation/{{site.version}}/jobs/job-runner.html). The run-samza-rest-service.sh script will block until the SamzaRestService terminates.
 
