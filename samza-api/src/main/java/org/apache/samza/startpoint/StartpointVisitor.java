@@ -18,54 +18,50 @@
  */
 package org.apache.samza.startpoint;
 
+import org.apache.samza.system.SystemAdmin;
 import org.apache.samza.system.SystemStreamPartition;
 
-
+// TODO: Fix the java docs. You're changing the semantics of the API, but the javadoc's doesn't reflect the newer semantics.
 /**
- * Visitor interface for system consumers to implement to support {@link Startpoint}s.
+ * Visitor interface that {@link SystemAdmin}'s should implement to support the {@link Startpoint}'s.
  */
 public interface StartpointVisitor {
 
   /**
-   * Seek to specific offset represented by {@link StartpointSpecific}
+   * Resolve from the {@link StartpointSpecific} to the system specific offset.
    * @param systemStreamPartition The {@link SystemStreamPartition} to seek the offset to.
    * @param startpointSpecific The {@link Startpoint} that represents the specific offset.
+   * @return the resolved offset.
    */
-  void visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific);
+  default String visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific) {
+    return startpointSpecific.getSpecificOffset();
+  }
 
   /**
-   * Seek to timestamp offset represented by {@link StartpointTimestamp}
+   *  timestamp offset represented by {@link StartpointTimestamp}
    * @param systemStreamPartition The {@link SystemStreamPartition} to seek the offset to.
    * @param startpointTimestamp The {@link Startpoint} that represents the timestamp offset.
+   * @return the resolved offset.
    */
-  default void visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
+  default String visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
     throw new UnsupportedOperationException("StartpointTimestamp is not supported.");
   }
 
   /**
-   * Seek to earliest offset represented by {@link StartpointOldest}
+   * Resolve the earliest offset represented by {@link StartpointOldest}
    * @param systemStreamPartition The {@link SystemStreamPartition} to seek the offset to.
    * @param startpointOldest The {@link Startpoint} that represents the earliest offset.
    */
-  default void visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
+  default String visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
     throw new UnsupportedOperationException("StartpointOldest is not supported.");
   }
 
   /**
-   * Seek to latest offset represented by {@link StartpointUpcoming}
+   *  latest offset represented by {@link StartpointUpcoming}
    * @param systemStreamPartition The {@link SystemStreamPartition} to seek the offset to.
    * @param startpointUpcoming The {@link Startpoint} that represents the latest offset.
    */
-  default void visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
+  default String visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
     throw new UnsupportedOperationException("StartpointUpcoming is not supported.");
-  }
-
-  /**
-   * Bootstrap signal represented by {@link StartpointCustom}
-   * @param systemStreamPartition The {@link SystemStreamPartition} to seek the offset to.
-   * @param startpointCustom The {@link Startpoint} that represents the bootstrap signal.
-   */
-  default void visit(SystemStreamPartition systemStreamPartition, StartpointCustom startpointCustom) {
-    throw new UnsupportedOperationException(String.format("%s is not supported.", startpointCustom.getClass().getSimpleName()));
   }
 }

@@ -20,6 +20,9 @@
 package org.apache.samza.system.kafka;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import java.util.Collections;
 import java.util.HashMap;
@@ -42,6 +45,7 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.TopicExistsException;
@@ -51,6 +55,11 @@ import org.apache.samza.config.Config;
 import org.apache.samza.config.SystemConfig;
 import org.apache.samza.config.KafkaConfig;
 import org.apache.samza.config.MapConfig;
+import org.apache.samza.startpoint.StartpointOldest;
+import org.apache.samza.startpoint.StartpointSpecific;
+import org.apache.samza.startpoint.StartpointTimestamp;
+import org.apache.samza.startpoint.StartpointUpcoming;
+import org.apache.samza.startpoint.StartpointVisitor;
 import org.apache.samza.system.StreamSpec;
 import org.apache.samza.system.StreamValidationException;
 import org.apache.samza.system.SystemAdmin;
@@ -181,14 +190,14 @@ public class KafkaSystemAdmin implements SystemAdmin {
       try {
         metadataConsumer.close();
       } catch (Exception e) {
-        LOG.warn("metadataConsumer.close for system " + systemName + " failed with exception.", e);
+        LOG.warn(String.format("Exception occurred when closing consumer of system: %s.", systemName), e);
       }
     }
     if (adminClientForDelete != null) {
       try {
         adminClientForDelete.close();
       } catch (Exception e) {
-        LOG.warn("AdminClient.close() for system {} failed with exception {}.", systemName, e);
+        LOG.warn(String.format("Exception occurred when closing the AdminClient of system: %s.", systemName), e);
       }
     }
 
@@ -607,18 +616,6 @@ public class KafkaSystemAdmin implements SystemAdmin {
     }
   }
 
-  // get partition info for topic
-  Map<String, List<PartitionInfo>> getTopicMetadata(Set<String> topics) {
-    Map<String, List<PartitionInfo>> streamToPartitionsInfo = new HashMap<>();
-    List<PartitionInfo> partitionInfoList;
-    for (String topic : topics) {
-      partitionInfoList = metadataConsumer.partitionsFor(topic);
-      streamToPartitionsInfo.put(topic, partitionInfoList);
-    }
-
-    return streamToPartitionsInfo;
-  }
-
   /**
    * Delete records up to (and including) the provided ssp offsets for
    * all system stream partitions specified in the map.
@@ -668,20 +665,16 @@ public class KafkaSystemAdmin implements SystemAdmin {
     return props;
   }
 
-  private Supplier<ZkUtils> getZkConnection() {
-    String zkConnect =
-        config.get(String.format(KafkaConfig.CONSUMER_CONFIGS_CONFIG_KEY(), systemName, ZOOKEEPER_CONNECT));
-    if (StringUtils.isBlank(zkConnect)) {
-      throw new SamzaException("Missing zookeeper.connect config for admin for system " + systemName);
-    }
-    return () -> ZkUtils.apply(zkConnect, 6000, 6000, false);
-  }
-
   @Override
   public Set<SystemStream> getAllSystemStreams() {
     return ((Set<String>) this.metadataConsumer.listTopics().keySet()).stream()
         .map(x -> new SystemStream(systemName, x))
         .collect(Collectors.toSet());
+  }
+
+  @Override
+  public StartpointVisitor getStartpointVisitor() {
+    return new KafkaStartpointToOffsetResolver(metadataConsumer);
   }
 
   /**
@@ -709,6 +702,88 @@ public class KafkaSystemAdmin implements SystemAdmin {
 
     private Map<SystemStreamPartition, String> getUpcomingOffsets() {
       return upcomingOffsets;
+    }
+  }
+
+  @VisibleForTesting
+  static class KafkaStartpointToOffsetResolver implements StartpointVisitor {
+
+    private final Consumer kafkaConsumer;
+
+    KafkaStartpointToOffsetResolver(Consumer kafkaConsumer) {
+      this.kafkaConsumer = kafkaConsumer;
+    }
+
+    @Override
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific) {
+      return startpointSpecific.getSpecificOffset();
+    }
+
+    @Override
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
+      TopicPartition topicPartition = toTopicPartition(systemStreamPartition);
+      Map<TopicPartition, OffsetAndTimestamp> topicPartitionToOffsetTimestamps;
+
+      // KafkaConsumer is not thread-safe.
+      synchronized (kafkaConsumer) {
+        Map<TopicPartition, Long> topicPartitionToTimestamp = ImmutableMap.of(topicPartition, startpointTimestamp.getTimestampOffset());
+        LOG.info("Finding offset for timestamp: {} in topic partition: {}.", topicPartition, startpointTimestamp.getTimestampOffset());
+        topicPartitionToOffsetTimestamps = kafkaConsumer.offsetsForTimes(topicPartitionToTimestamp);
+      }
+
+      OffsetAndTimestamp offsetAndTimestamp = topicPartitionToOffsetTimestamps.get(topicPartition);
+      if (offsetAndTimestamp != null) {
+        return String.valueOf(offsetAndTimestamp.offset());
+      } else {
+        Map<TopicPartition, Long> topicPartitionToOffsets;
+
+        // KafkaConsumer is not thread-safe.
+        synchronized (kafkaConsumer) {
+          LOG.info("Finding the end offset for topic partition: {}.", topicPartition);
+          topicPartitionToOffsets = kafkaConsumer.endOffsets(ImmutableSet.of(topicPartition));
+        }
+
+        Long endOffset = topicPartitionToOffsets.get(topicPartition);
+        return String.valueOf(endOffset);
+      }
+    }
+
+    @Override
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
+      TopicPartition topicPartition = toTopicPartition(systemStreamPartition);
+      Map<TopicPartition, Long> topicPartitionToOffsets;
+
+      // KafkaConsumer is not thread-safe.
+      synchronized (kafkaConsumer) {
+        LOG.info("The beginning offset for topic partition: {}.", topicPartition);
+        topicPartitionToOffsets = kafkaConsumer.beginningOffsets(ImmutableSet.of(topicPartition));
+      }
+
+      Long beginningOffset = topicPartitionToOffsets.get(topicPartition);
+      return String.valueOf(beginningOffset);
+    }
+
+    @Override
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
+      TopicPartition topicPartition = toTopicPartition(systemStreamPartition);
+      Map<TopicPartition, Long> topicPartitionToOffsets;
+
+      // KafkaConsumer is not thread-safe.
+      synchronized (kafkaConsumer) {
+        LOG.info("Finding the end offset for topic partition: {}.", topicPartition);
+        topicPartitionToOffsets = kafkaConsumer.endOffsets(ImmutableSet.of(topicPartition));
+      }
+
+      Long endOffset = topicPartitionToOffsets.get(topicPartition);
+      return String.valueOf(endOffset);
+    }
+
+    static TopicPartition toTopicPartition(SystemStreamPartition systemStreamPartition) {
+      Preconditions.checkNotNull(systemStreamPartition);
+      Preconditions.checkNotNull(systemStreamPartition.getPartition());
+      Preconditions.checkNotNull(systemStreamPartition.getStream());
+
+      return new TopicPartition(systemStreamPartition.getStream(), systemStreamPartition.getPartition().getPartitionId());
     }
   }
 }
