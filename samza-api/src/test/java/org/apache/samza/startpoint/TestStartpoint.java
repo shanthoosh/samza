@@ -85,28 +85,33 @@ public class TestStartpoint {
     Class<? extends Startpoint> visitedClass;
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific) {
       visitedClass = startpointSpecific.getClass();
+      return null;
     }
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
       visitedClass = startpointTimestamp.getClass();
+      return null;
     }
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
       visitedClass = startpointOldest.getClass();
+      return null;
     }
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
       visitedClass = startpointUpcoming.getClass();
+      return null;
     }
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointCustom startpointCustom) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointCustom startpointCustom) {
       visitedClass = startpointCustom.getClass();
+      return null;
     }
   }
 }

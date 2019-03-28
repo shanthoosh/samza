@@ -337,7 +337,7 @@ public class KafkaSystemConsumer<K, V> extends BlockingEnvelopeMap implements Sy
     }
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointSpecific startpointSpecific) {
       TopicPartition topicPartition = toTopicPartition(systemStreamPartition);
       long offsetInStartpoint = Long.parseLong(startpointSpecific.getSpecificOffset());
       LOG.info("Updating the consumer fetch offsets of topic partition: {} to {}.", topicPartition, offsetInStartpoint);
@@ -349,10 +349,11 @@ public class KafkaSystemConsumer<K, V> extends BlockingEnvelopeMap implements Sy
         // add the partition to the proxy
         proxy.addTopicPartition(systemStreamPartition, kafkaConsumer.position(topicPartition));
       }
+      return null;
     }
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointTimestamp startpointTimestamp) {
       Long timestampInStartpoint = startpointTimestamp.getTimestampOffset();
       TopicPartition topicPartition = toTopicPartition(systemStreamPartition);
       Map<TopicPartition, Long> topicPartitionsToTimeStamps = ImmutableMap.of(topicPartition, timestampInStartpoint);
@@ -388,10 +389,11 @@ public class KafkaSystemConsumer<K, V> extends BlockingEnvelopeMap implements Sy
           proxy.addTopicPartition(systemStreamPartition, kafkaConsumer.position(topicPartition));
         }
       }
+      return null;
     }
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointOldest startpointOldest) {
       TopicPartition topicPartition = toTopicPartition(systemStreamPartition);
       Collection<TopicPartition> topicPartitions = ImmutableList.of(topicPartition);
       LOG.info("Seeking the kafka consumer to the first offset for the topic partition: {}.", topicPartitions);
@@ -402,10 +404,11 @@ public class KafkaSystemConsumer<K, V> extends BlockingEnvelopeMap implements Sy
         // add the partition to the proxy
         proxy.addTopicPartition(systemStreamPartition, kafkaConsumer.position(topicPartition));
       }
+      return null;
     }
 
     @Override
-    public void visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
+    public String visit(SystemStreamPartition systemStreamPartition, StartpointUpcoming startpointUpcoming) {
       TopicPartition topicPartition = toTopicPartition(systemStreamPartition);
       Collection<TopicPartition> topicPartitions = ImmutableList.of(topicPartition);
       LOG.info("Seeking the kafka consumer to the end offset for the topic partition: {}.", topicPartitions);
@@ -416,6 +419,8 @@ public class KafkaSystemConsumer<K, V> extends BlockingEnvelopeMap implements Sy
         // add the partition to the proxy
         proxy.addTopicPartition(systemStreamPartition, kafkaConsumer.position(topicPartition));
       }
+
+      return null;
     }
   }
 
