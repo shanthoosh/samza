@@ -31,6 +31,7 @@ import org.apache.samza.container.grouper.stream.{SSPGrouperProxy, SystemStreamP
 import org.apache.samza.container.grouper.task._
 import org.apache.samza.container.{LocalityManager, TaskName}
 import org.apache.samza.coordinator.server.{HttpServer, JobServlet}
+import org.apache.samza.coordinator.stream.CoordinatorStreamManager
 import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping
 import org.apache.samza.job.model.{ContainerModel, JobModel, TaskMode, TaskModel}
 import org.apache.samza.metrics.{MetricsRegistry, MetricsRegistryMap}
@@ -64,10 +65,14 @@ object JobModelManager extends Logging {
    * @param metricsRegistry the registry for reporting metrics.
    * @return the instantiated {@see JobModelManager}.
    */
-  def apply(config: Config, changelogPartitionMapping: util.Map[TaskName, Integer], metricsRegistry: MetricsRegistry = new MetricsRegistryMap()): JobModelManager = {
-    val localityManager = new LocalityManager(config, metricsRegistry)
-    val taskAssignmentManager = new TaskAssignmentManager(config, metricsRegistry)
-    val taskPartitionAssignmentManager = new TaskPartitionAssignmentManager(config, metricsRegistry)
+  def apply(config: Config, changelogPartitionMapping: util.Map[TaskName, Integer],
+            coordinatorStreamManager: CoordinatorStreamManager,
+            metricsRegistry: MetricsRegistry = new MetricsRegistryMap()): JobModelManager = {
+    val coordinatorStreamManager = new CoordinatorStreamManager(config, metricsRegistry)
+    coordinatorStreamManager.start()
+    val localityManager = new LocalityManager(config, metricsRegistry, coordinatorStreamManager)
+    val taskAssignmentManager = new TaskAssignmentManager(config, metricsRegistry, coordinatorStreamManager)
+    val taskPartitionAssignmentManager = new TaskPartitionAssignmentManager(config, metricsRegistry, coordinatorStreamManager)
     val systemAdmins = new SystemAdmins(config)
     try {
       systemAdmins.start()
@@ -85,10 +90,7 @@ object JobModelManager extends Logging {
       currentJobModelManager = new JobModelManager(jobModelRef.get(), server, localityManager)
       currentJobModelManager
     } finally {
-      taskPartitionAssignmentManager.close()
-      taskAssignmentManager.close()
-      systemAdmins.stop()
-      // Not closing localityManager, since {@code ClusterBasedJobCoordinator} uses it to read container locality through {@code JobModel}.
+      // Not closing coordinatorStreamManager, since {@code ClusterBasedJobCoordinator} uses it to read container locality through {@code JobModel}.
     }
   }
 

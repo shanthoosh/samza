@@ -25,6 +25,8 @@ import java.util.HashMap;
 import java.util.Map;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JobConfig;
+import org.apache.samza.coordinator.metadatastore.CoordinatorStreamStore;
+import org.apache.samza.coordinator.stream.CoordinatorStreamManager;
 import org.apache.samza.coordinator.stream.CoordinatorStreamValueSerde;
 import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping;
 import org.apache.samza.metadatastore.MetadataStore;
@@ -71,6 +73,11 @@ public class LocalityManager {
     this.metadataStore = metadataStoreFactory.getMetadataStore(SetContainerHostMapping.TYPE, config, metricsRegistry);
     this.metadataStore.init();
     this.valueSerde = valueSerde;
+  }
+
+  public LocalityManager(Config config, MetricsRegistry metricsRegistry, CoordinatorStreamManager coordinatorStreamManager) {
+    this.metadataStore = new CoordinatorStreamStore(SetContainerHostMapping.TYPE, config, metricsRegistry, coordinatorStreamManager);
+    this.valueSerde = new CoordinatorStreamValueSerde(SetContainerHostMapping.TYPE);
   }
 
   /**

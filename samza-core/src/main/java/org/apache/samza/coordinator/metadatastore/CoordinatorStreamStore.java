@@ -18,32 +18,20 @@
  */
 package org.apache.samza.coordinator.metadatastore;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
 import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Set;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Objects;
-import org.apache.samza.Partition;
 import org.apache.samza.config.Config;
 import org.apache.samza.coordinator.stream.CoordinatorStreamKeySerde;
+import org.apache.samza.coordinator.stream.CoordinatorStreamManager;
 import org.apache.samza.coordinator.stream.messages.CoordinatorStreamMessage;
 import org.apache.samza.metadatastore.MetadataStore;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.serializers.JsonSerde;
 import org.apache.samza.serializers.Serde;
-import org.apache.samza.system.IncomingMessageEnvelope;
-import org.apache.samza.system.SystemAdmin;
-import org.apache.samza.system.SystemConsumer;
-import org.apache.samza.system.SystemFactory;
 import org.apache.samza.system.SystemStream;
-import org.apache.samza.system.SystemProducer;
-import org.apache.samza.system.SystemStreamPartition;
-import org.apache.samza.system.SystemStreamPartitionIterator;
-import org.apache.samza.system.SystemStreamMetadata;
-import org.apache.samza.system.SystemStreamMetadata.SystemStreamPartitionMetadata;
 import org.apache.samza.system.OutgoingMessageEnvelope;
 import org.apache.samza.util.CoordinatorStreamUtil;
 import org.slf4j.Logger;
@@ -59,46 +47,29 @@ public class CoordinatorStreamStore implements MetadataStore {
   private static final Logger LOG = LoggerFactory.getLogger(CoordinatorStreamStore.class);
   private static final String SOURCE = "SamzaContainer";
 
-  private final Config config;
   private final SystemStream coordinatorSystemStream;
-  private final SystemStreamPartition coordinatorSystemStreamPartition;
-  private final SystemProducer systemProducer;
-  private final SystemConsumer systemConsumer;
-  private final SystemAdmin systemAdmin;
-  private final String type;
-  private final CoordinatorStreamKeySerde keySerde;
-
-  private final Map<String, byte[]> bootstrappedMessages = new HashMap<>();
+  private final String namespace;
+  private final CoordinatorStreamKeySerde coordinatorKeySerde;
+  private final Serde<Map<String, Object>> coordinatorMessageSerde = new JsonSerde<>();
+  private final CoordinatorStreamManager coordinatorStreamManager;
   private final Object bootstrapLock = new Object();
-  private final AtomicBoolean isInitialized = new AtomicBoolean(false);
 
-  private SystemStreamPartitionIterator iterator;
+  private Map<String, byte[]> bootstrappedMessages = new HashMap<>();
 
   public CoordinatorStreamStore(String namespace, Config config, MetricsRegistry metricsRegistry) {
-    this.config = config;
-    this.type = namespace;
-    this.keySerde = new CoordinatorStreamKeySerde(type);
+    this(namespace, config, metricsRegistry, new CoordinatorStreamManager(config, metricsRegistry));
+  }
+
+  public CoordinatorStreamStore(String namespace, Config config, MetricsRegistry metricsRegistry, CoordinatorStreamManager coordinatorStreamManager) {
+    this.namespace = namespace;
+    this.coordinatorKeySerde = new CoordinatorStreamKeySerde(this.namespace);
     this.coordinatorSystemStream = CoordinatorStreamUtil.getCoordinatorSystemStream(config);
-    this.coordinatorSystemStreamPartition = new SystemStreamPartition(coordinatorSystemStream, new Partition(0));
-    SystemFactory systemFactory = CoordinatorStreamUtil.getCoordinatorSystemFactory(config);
-    this.systemProducer = systemFactory.getProducer(this.coordinatorSystemStream.getSystem(), config, metricsRegistry);
-    this.systemConsumer = systemFactory.getConsumer(this.coordinatorSystemStream.getSystem(), config, metricsRegistry);
-    this.systemAdmin = systemFactory.getAdmin(this.coordinatorSystemStream.getSystem(), config);
+    this.coordinatorStreamManager = coordinatorStreamManager;
   }
 
   @Override
   public void init() {
-    if (isInitialized.compareAndSet(false, true)) {
-      LOG.info("Starting the coordinator stream system consumer with config: {}.", config);
-      registerConsumer();
-      systemConsumer.start();
-      systemProducer.register(SOURCE);
-      systemProducer.start();
-      iterator = new SystemStreamPartitionIterator(systemConsumer, coordinatorSystemStreamPartition);
-      bootstrapMessagesFromStream();
-    } else {
-      LOG.info("Store had already been initialized. Skipping.", coordinatorSystemStreamPartition);
-    }
+    coordinatorStreamManager.start();
   }
 
   @Override
@@ -109,8 +80,8 @@ public class CoordinatorStreamStore implements MetadataStore {
 
   @Override
   public void put(String key, byte[] value) {
-    OutgoingMessageEnvelope envelope = new OutgoingMessageEnvelope(coordinatorSystemStream, 0, keySerde.toBytes(key), value);
-    systemProducer.send(SOURCE, envelope);
+    OutgoingMessageEnvelope envelope = new OutgoingMessageEnvelope(coordinatorSystemStream, 0, coordinatorKeySerde.toBytes(key), value);
+    coordinatorStreamManager.send(SOURCE, envelope);
     flush();
   }
 
@@ -131,30 +102,22 @@ public class CoordinatorStreamStore implements MetadataStore {
    */
   private void bootstrapMessagesFromStream() {
     synchronized (bootstrapLock) {
-      while (iterator.hasNext()) {
-        IncomingMessageEnvelope envelope = iterator.next();
-        byte[] keyAsBytes = (byte[]) envelope.getKey();
-        Serde<List<?>> serde = new JsonSerde<>();
-        Object[] keyArray = serde.fromBytes(keyAsBytes).toArray();
-        CoordinatorStreamMessage coordinatorStreamMessage = new CoordinatorStreamMessage(keyArray, new HashMap<>());
-        if (Objects.equals(coordinatorStreamMessage.getType(), type)) {
-          if (envelope.getMessage() != null) {
-            bootstrappedMessages.put(coordinatorStreamMessage.getKey(), (byte[]) envelope.getMessage());
-          } else {
-            bootstrappedMessages.remove(coordinatorStreamMessage.getKey());
-          }
+      Map<String, byte[]> bootstrappedMessages = new HashMap<>();
+      Set<CoordinatorStreamMessage> bootstrappedStream = coordinatorStreamManager.getBootstrappedStream(namespace);
+      for (CoordinatorStreamMessage message : bootstrappedStream) {
+        if (Objects.equals(message.getType(), namespace)) {
+          bootstrappedMessages.put(message.getKey(), coordinatorMessageSerde.toBytes(message.getMessageMap()));
         }
       }
+      this.bootstrappedMessages = bootstrappedMessages;
     }
   }
 
   @Override
   public void close() {
     try {
-      LOG.info("Stopping the coordinator stream system consumer.", config);
-      systemAdmin.stop();
-      systemProducer.stop();
-      systemConsumer.stop();
+      LOG.info("Stopping the coordinator stream manager.");
+      coordinatorStreamManager.stop();
     } catch (Exception e) {
       LOG.error("Exception occurred when closing the metadata store:", e);
     }
@@ -163,25 +126,9 @@ public class CoordinatorStreamStore implements MetadataStore {
   @Override
   public void flush() {
     try {
-      systemProducer.flush(SOURCE);
+      coordinatorStreamManager.flush(SOURCE);
     } catch (Exception e) {
       LOG.error("Exception occurred when flushing the metadata store:", e);
     }
-  }
-
-  private void registerConsumer() {
-    LOG.debug("Attempting to register system stream partition: {}", coordinatorSystemStreamPartition);
-    String streamName = coordinatorSystemStreamPartition.getStream();
-    Map<String, SystemStreamMetadata> systemStreamMetadataMap = systemAdmin.getSystemStreamMetadata(Sets.newHashSet(streamName));
-
-    SystemStreamMetadata systemStreamMetadata = systemStreamMetadataMap.get(streamName);
-    Preconditions.checkNotNull(systemStreamMetadata, String.format("System stream metadata does not exist for stream: %s.", streamName));
-
-    SystemStreamPartitionMetadata systemStreamPartitionMetadata = systemStreamMetadata.getSystemStreamPartitionMetadata().get(coordinatorSystemStreamPartition.getPartition());
-    Preconditions.checkNotNull(systemStreamPartitionMetadata, String.format("System stream partition metadata does not exist for: %s.", coordinatorSystemStreamPartition));
-
-    String startingOffset = systemStreamPartitionMetadata.getOldestOffset();
-    LOG.info("Registering system stream partition: {} with offset: {}.", coordinatorSystemStreamPartition, startingOffset);
-    systemConsumer.register(coordinatorSystemStreamPartition, startingOffset);
   }
 }

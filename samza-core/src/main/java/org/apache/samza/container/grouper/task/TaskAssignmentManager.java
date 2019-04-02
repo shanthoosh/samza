@@ -24,7 +24,8 @@ import java.util.Map;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JobConfig;
 import org.apache.samza.container.TaskName;
-import org.apache.samza.coordinator.stream.CoordinatorStreamKeySerde;
+import org.apache.samza.coordinator.metadatastore.CoordinatorStreamStore;
+import org.apache.samza.coordinator.stream.CoordinatorStreamManager;
 import org.apache.samza.coordinator.stream.CoordinatorStreamValueSerde;
 import org.apache.samza.coordinator.stream.messages.SetTaskContainerMapping;
 import org.apache.samza.coordinator.stream.messages.SetTaskModeMapping;
@@ -45,7 +46,6 @@ public class TaskAssignmentManager {
   private static final Logger LOG = LoggerFactory.getLogger(TaskAssignmentManager.class);
 
   private final Map<String, String> taskNameToContainerId = new HashMap<>();
-  private final Serde<String> keySerde;
   private final Serde<String> containerIdSerde;
   private final Serde<String> taskModeSerde;
 
@@ -61,7 +61,7 @@ public class TaskAssignmentManager {
    * @param metricsRegistry the registry for reporting metrics.
    */
   public TaskAssignmentManager(Config config, MetricsRegistry metricsRegistry) {
-    this(config, metricsRegistry, new CoordinatorStreamKeySerde(SetTaskContainerMapping.TYPE),
+    this(config, metricsRegistry,
          new CoordinatorStreamValueSerde(SetTaskContainerMapping.TYPE), new CoordinatorStreamValueSerde(SetTaskModeMapping.TYPE));
   }
 
@@ -75,12 +75,10 @@ public class TaskAssignmentManager {
    * ObjectOutputStream for serialization) modes.
    * @param config the configuration required for setting up metadata store.
    * @param metricsRegistry the registry for reporting metrics.
-   * @param keySerde the key serializer.
    * @param containerIdSerde the value serializer.
    * @param taskModeSerde the task-mode serializer.
    */
-  public TaskAssignmentManager(Config config, MetricsRegistry metricsRegistry, Serde<String> keySerde, Serde<String> containerIdSerde, Serde<String> taskModeSerde) {
-    this.keySerde = keySerde;
+  public TaskAssignmentManager(Config config, MetricsRegistry metricsRegistry, Serde<String> containerIdSerde, Serde<String> taskModeSerde) {
     this.containerIdSerde = containerIdSerde;
     this.taskModeSerde = taskModeSerde;
 
@@ -89,6 +87,13 @@ public class TaskAssignmentManager {
     this.taskContainerMappingMetadataStore = metadataStoreFactory.getMetadataStore(SetTaskContainerMapping.TYPE, config, metricsRegistry);
     this.taskModeMappingMetadataStore.init();
     this.taskContainerMappingMetadataStore.init();
+  }
+
+  public TaskAssignmentManager(Config config, MetricsRegistry metricsRegistry, CoordinatorStreamManager coordinatorStreamManager) {
+    this.taskModeMappingMetadataStore = new CoordinatorStreamStore(SetTaskModeMapping.TYPE, config, metricsRegistry, coordinatorStreamManager);
+    this.taskContainerMappingMetadataStore = new CoordinatorStreamStore(SetTaskContainerMapping.TYPE, config, metricsRegistry, coordinatorStreamManager);
+    this.containerIdSerde = new CoordinatorStreamValueSerde(SetTaskContainerMapping.TYPE);
+    this.taskModeSerde = new CoordinatorStreamValueSerde(SetTaskModeMapping.TYPE);
   }
 
   /**

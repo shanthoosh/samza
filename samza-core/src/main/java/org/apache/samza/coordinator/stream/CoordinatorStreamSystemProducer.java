@@ -132,6 +132,15 @@ public class CoordinatorStreamSystemProducer {
     }
   }
 
+  public void send(String source, OutgoingMessageEnvelope envelope) {
+    log.debug("Sending {}", envelope);
+    try {
+      systemProducer.send(source, envelope);
+    } catch (Exception e) {
+      throw new SamzaException(e);
+    }
+  }
+
   /**
    * Helper method that sends a series of SetConfig messages to the coordinator
    * stream.
@@ -147,6 +156,10 @@ public class CoordinatorStreamSystemProducer {
     for (Map.Entry<String, String> configPair : config.entrySet()) {
       send(new SetConfig(source, configPair.getKey(), configPair.getValue()));
     }
+    systemProducer.flush(source);
+  }
+
+  public void flush(String source) {
     systemProducer.flush(source);
   }
 

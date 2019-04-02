@@ -21,6 +21,8 @@ package org.apache.samza.container.grouper.task;
 import org.apache.samza.SamzaException;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JobConfig;
+import org.apache.samza.coordinator.metadatastore.CoordinatorStreamStore;
+import org.apache.samza.coordinator.stream.CoordinatorStreamManager;
 import org.apache.samza.coordinator.stream.CoordinatorStreamValueSerde;
 import org.apache.samza.coordinator.stream.messages.SetTaskPartitionMapping;
 import org.apache.samza.metadatastore.MetadataStore;
@@ -61,6 +63,11 @@ public class TaskPartitionAssignmentManager {
    */
   public TaskPartitionAssignmentManager(Config config, MetricsRegistry metricsRegistry) {
     this(config, metricsRegistry, new CoordinatorStreamValueSerde(SetTaskPartitionMapping.TYPE));
+  }
+
+  public TaskPartitionAssignmentManager(Config config, MetricsRegistry metricsRegistry, CoordinatorStreamManager coordinatorStreamManager) {
+    this.metadataStore = new CoordinatorStreamStore(SetTaskPartitionMapping.TYPE, config, metricsRegistry, coordinatorStreamManager);
+    this.valueSerde = new CoordinatorStreamValueSerde(SetTaskPartitionMapping.TYPE);
   }
 
   TaskPartitionAssignmentManager(Config config, MetricsRegistry metricsRegistry, Serde<String> valueSerde) {

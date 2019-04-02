@@ -23,6 +23,7 @@ import java.util.Set;
 import org.apache.samza.config.Config;
 import org.apache.samza.coordinator.stream.messages.CoordinatorStreamMessage;
 import org.apache.samza.metrics.MetricsRegistry;
+import org.apache.samza.system.OutgoingMessageEnvelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -129,6 +130,23 @@ public class CoordinatorStreamManager {
           String.format("CoordinatorStreamProducer is not initialized in the CoordinatorStreamManager. "));
     }
     coordinatorStreamProducer.send(message);
+  }
+
+  public void send(String source, OutgoingMessageEnvelope envelope) {
+    if (coordinatorStreamProducer == null) {
+      throw new UnsupportedOperationException(
+          String.format("CoordinatorStreamProducer is not initialized in the CoordinatorStreamManager. "));
+    }
+    coordinatorStreamProducer.send(source, envelope);
+
+  }
+
+  public void flush(String source) {
+    if (coordinatorStreamProducer == null) {
+      throw new UnsupportedOperationException(
+          String.format("CoordinatorStreamProducer is not initialized in the CoordinatorStreamManager. "));
+    }
+    coordinatorStreamProducer.flush(source);
   }
 
   /**
