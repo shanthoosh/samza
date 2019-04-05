@@ -19,6 +19,7 @@
 
 package org.apache.samza.storage;
 
+import com.google.common.base.Preconditions;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -28,16 +29,15 @@ import org.apache.samza.config.Config;
 import org.apache.samza.config.JavaStorageConfig;
 import org.apache.samza.config.SystemConfig;
 import org.apache.samza.container.TaskName;
-import org.apache.samza.coordinator.stream.messages.CoordinatorStreamMessage;
+import org.apache.samza.coordinator.stream.CoordinatorStreamValueSerde;
 import org.apache.samza.coordinator.stream.messages.SetChangelogMapping;
-import org.apache.samza.coordinator.stream.CoordinatorStreamManager;
+import org.apache.samza.metadatastore.MetadataStore;
 import org.apache.samza.system.StreamSpec;
 import org.apache.samza.system.SystemAdmin;
 import org.apache.samza.system.SystemStream;
 import org.apache.samza.util.StreamUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 /**
  * The Changelog manager creates the changelog stream. If a coordinator stream manager is provided,
@@ -46,18 +46,18 @@ import org.slf4j.LoggerFactory;
 public class ChangelogStreamManager {
 
   private static final Logger LOG = LoggerFactory.getLogger(ChangelogStreamManager.class);
-  // This is legacy for changelog. Need to investigate what happens if you use a different source name
-  private static final String SOURCE = "JobModelManager";
 
-  private final CoordinatorStreamManager coordinatorStreamManager;
+  private final MetadataStore metadataStore;
+  private final CoordinatorStreamValueSerde valueSerde;
 
   /**
    * Construct changelog manager with a bootstrapped coordinator stream.
    *
-   * @param coordinatorStreamManager Coordinator stream manager.
+   * @param metadataStore an instance of MetadataStore to read/write the changelog partition mapping.
    */
-  public ChangelogStreamManager(CoordinatorStreamManager coordinatorStreamManager) {
-    this.coordinatorStreamManager = coordinatorStreamManager;
+  public ChangelogStreamManager(MetadataStore metadataStore) {
+    this.metadataStore = metadataStore;
+    this.valueSerde = new CoordinatorStreamValueSerde(SetChangelogMapping.TYPE);
   }
 
   /**
@@ -66,12 +66,14 @@ public class ChangelogStreamManager {
    */
   public Map<TaskName, Integer> readPartitionMapping() {
     LOG.debug("Reading changelog partition information");
-    final HashMap<TaskName, Integer> changelogMapping = new HashMap<>();
-    for (CoordinatorStreamMessage coordinatorStreamMessage : coordinatorStreamManager.getBootstrappedStream(SetChangelogMapping.TYPE)) {
-      SetChangelogMapping changelogMapEntry = new SetChangelogMapping(coordinatorStreamMessage);
-      changelogMapping.put(new TaskName(changelogMapEntry.getTaskName()), changelogMapEntry.getPartition());
-      LOG.debug("TaskName: {} is mapped to {}", changelogMapEntry.getTaskName(), changelogMapEntry.getPartition());
-    }
+    final Map<TaskName, Integer> changelogMapping = new HashMap<>();
+    metadataStore.all().forEach((taskName, partitionIdAsBytes) -> {
+        String partitionId = valueSerde.fromBytes(partitionIdAsBytes);
+        LOG.debug("TaskName: {} is mapped to {}", taskName, partitionId);
+        if (partitionId != null) {
+          changelogMapping.put(new TaskName(taskName), Integer.valueOf(partitionId));
+        }
+      });
     return changelogMapping;
   }
 
@@ -83,8 +85,16 @@ public class ChangelogStreamManager {
   public void writePartitionMapping(Map<TaskName, Integer> changelogEntries) {
     LOG.debug("Updating changelog information with: ");
     for (Map.Entry<TaskName, Integer> entry : changelogEntries.entrySet()) {
-      LOG.debug("TaskName: {} to Partition: {}", entry.getKey().getTaskName(), entry.getValue());
-      coordinatorStreamManager.send(new SetChangelogMapping(SOURCE, entry.getKey().getTaskName(), entry.getValue()));
+      Preconditions.checkNotNull(entry.getKey());
+      String taskName = entry.getKey().getTaskName();
+      if (entry.getValue() != null) {
+        String changeLogPartitionId = String.valueOf(entry.getValue());
+        LOG.debug("TaskName: {} to Partition: {}", taskName, entry.getValue());
+        metadataStore.put(taskName, valueSerde.toBytes(changeLogPartitionId));
+      } else {
+        LOG.debug("Deleting the TaskName: {}", taskName);
+        metadataStore.delete(taskName);
+      }
     }
   }
 
@@ -101,8 +111,7 @@ public class ChangelogStreamManager {
   }
 
   /**
-   * Utility method to create and validate changelog streams. The method is static because it does not require an
-   * instance of the {@link CoordinatorStreamManager}
+   * Utility method to create and validate changelog streams.
    * @param config Config with changelog info
    * @param maxChangeLogStreamPartitions Maximum changelog stream partitions to create
    */

@@ -20,7 +20,6 @@
 package org.apache.samza.checkpoint
 
 import java.net.URI
-import java.util
 import java.util.regex.Pattern
 
 import joptsimple.ArgumentAcceptingOptionSpec
@@ -29,16 +28,18 @@ import org.apache.samza.checkpoint.CheckpointTool.TaskNameToCheckpointMap
 import org.apache.samza.config.TaskConfig.Config2Task
 import org.apache.samza.config._
 import org.apache.samza.container.TaskName
-import org.apache.samza.job.JobRunner.{info, warn, _}
+import org.apache.samza.job.JobRunner.info
 import org.apache.samza.metrics.MetricsRegistryMap
 import org.apache.samza.system.SystemStreamPartition
-import org.apache.samza.util.{CommandLine, Logging, Util}
+import org.apache.samza.util.{CommandLine, CoordinatorStreamUtil, Logging, Util}
 import org.apache.samza.Partition
 import org.apache.samza.SamzaException
+import org.apache.samza.clustermanager.ClusterBasedJobCoordinator
 
 import scala.collection.JavaConverters._
 import org.apache.samza.coordinator.JobModelManager
-import org.apache.samza.coordinator.stream.CoordinatorStreamManager
+import org.apache.samza.coordinator.metadatastore.{CoordinatorStreamStore, NamespaceAwareCoordinatorStreamStore}
+import org.apache.samza.coordinator.stream.messages.SetChangelogMapping
 import org.apache.samza.execution.JobPlanner
 import org.apache.samza.storage.ChangelogStreamManager
 
@@ -126,8 +127,9 @@ object CheckpointTool {
   }
 
   def apply(config: Config, offsets: TaskNameToCheckpointMap): CheckpointTool = {
-    val coordinatorStreamManager = new CoordinatorStreamManager(config, new MetricsRegistryMap())
-    new CheckpointTool(offsets, coordinatorStreamManager)
+    val metadataStore: CoordinatorStreamStore = new CoordinatorStreamStore(config, new MetricsRegistryMap())
+    metadataStore.init()
+    new CheckpointTool(offsets, metadataStore)
   }
 
   def rewriteConfig(config: JobConfig): Config = {
@@ -158,14 +160,10 @@ object CheckpointTool {
   }
 }
 
-class CheckpointTool(newOffsets: TaskNameToCheckpointMap, coordinatorStreamManager: CoordinatorStreamManager) extends Logging {
+class CheckpointTool(newOffsets: TaskNameToCheckpointMap, coordinatorStreamStore: CoordinatorStreamStore) extends Logging {
 
   def run() {
-    // Read the configuration stored in the coordinator stream.
-    coordinatorStreamManager.register(getClass.getSimpleName)
-    coordinatorStreamManager.start()
-    coordinatorStreamManager.bootstrap()
-    val configFromCoordinatorStream: Config = coordinatorStreamManager.getConfig
+    val configFromCoordinatorStream: Config = getConfigFromCoordinatorStream(coordinatorStreamStore)
 
     // Instantiate the checkpoint manager with coordinator stream configuration.
     val checkpointManager: CheckpointManager = configFromCoordinatorStream.getCheckpointManagerFactory() match {
@@ -175,44 +173,50 @@ class CheckpointTool(newOffsets: TaskNameToCheckpointMap, coordinatorStreamManag
       case _ =>
         throw new SamzaException("Configuration: task.checkpoint.factory is not defined.")
     }
+    try {
+      // Find all the TaskNames that would be generated for this job config
+      val changelogManager = new ChangelogStreamManager(new NamespaceAwareCoordinatorStreamStore(coordinatorStreamStore, SetChangelogMapping.TYPE))
+      val jobModelManager = JobModelManager(configFromCoordinatorStream, changelogManager.readPartitionMapping(), coordinatorStreamStore, new MetricsRegistryMap())
+      val taskNames = jobModelManager
+        .jobModel
+        .getContainers
+        .values
+        .asScala
+        .flatMap(_.getTasks.asScala.keys)
+        .toSet
 
-    // Find all the TaskNames that would be generated for this job config
-    val changelogManager = new ChangelogStreamManager(coordinatorStreamManager)
-    val jobModelManager = JobModelManager(configFromCoordinatorStream, changelogManager.readPartitionMapping())
-    val taskNames = jobModelManager
-      .jobModel
-      .getContainers
-      .values
-      .asScala
-      .flatMap(_.getTasks.asScala.keys)
-      .toSet
+      taskNames.foreach(checkpointManager.register)
+      checkpointManager.start()
 
-    taskNames.foreach(checkpointManager.register)
-    checkpointManager.start()
+      val lastCheckpoints = taskNames.map(taskName => {
+        taskName -> Option(checkpointManager.readLastCheckpoint(taskName))
+          .getOrElse(new Checkpoint(new java.util.HashMap[SystemStreamPartition, String]()))
+          .getOffsets
+          .asScala
+          .toMap
+      }).toMap
 
-    val lastCheckpoints = taskNames.map(taskName => {
-      taskName -> Option(checkpointManager.readLastCheckpoint(taskName))
-                                          .getOrElse(new Checkpoint(new java.util.HashMap[SystemStreamPartition, String]()))
-                                          .getOffsets
-                                          .asScala
-                                          .toMap
-    }).toMap
+      lastCheckpoints.foreach(lcp => logCheckpoint(lcp._1, lcp._2, "Current checkpoint for task: "+ lcp._1))
 
-    lastCheckpoints.foreach(lcp => logCheckpoint(lcp._1, lcp._2, "Current checkpoint for task: "+ lcp._1))
-
-    if (newOffsets != null) {
-      newOffsets.foreach {
-        case (taskName: TaskName, offsets: Map[SystemStreamPartition, String]) => {
-          logCheckpoint(taskName, offsets, "New offset to be written for task: " + taskName)
-          val checkpoint = new Checkpoint(offsets.asJava)
-          checkpointManager.writeCheckpoint(taskName, checkpoint)
-          info(s"Updated the checkpoint of the task: $taskName to: $offsets")
+      if (newOffsets != null) {
+        newOffsets.foreach {
+          case (taskName: TaskName, offsets: Map[SystemStreamPartition, String]) => {
+            logCheckpoint(taskName, offsets, "New offset to be written for task: " + taskName)
+            val checkpoint = new Checkpoint(offsets.asJava)
+            checkpointManager.writeCheckpoint(taskName, checkpoint)
+            info(s"Updated the checkpoint of the task: $taskName to: $offsets")
+          }
         }
       }
-    }
+    } finally {
+      checkpointManager.stop()
+      coordinatorStreamStore.close()
+   }
+  }
 
-    checkpointManager.stop()
-    coordinatorStreamManager.stop()
+  def getConfigFromCoordinatorStream(coordinatorStreamStore: CoordinatorStreamStore): Config = {
+    return CoordinatorStreamUtil.readConfigFromCoordinatorStream(coordinatorStreamStore)
+
   }
 
   def logCheckpoint(tn: TaskName, checkpoint: Map[SystemStreamPartition, String], prefix: String) {

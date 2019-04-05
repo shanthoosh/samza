@@ -30,11 +30,10 @@ import org.apache.samza.config.Config
 import org.apache.samza.container.grouper.stream.{SSPGrouperProxy, SystemStreamPartitionGrouperFactory}
 import org.apache.samza.container.grouper.task._
 import org.apache.samza.container.{LocalityManager, TaskName}
-import org.apache.samza.coordinator.metadatastore.{CoordinatorStreamMetadataStoreFactory, CoordinatorStreamStore}
+import org.apache.samza.coordinator.metadatastore.CoordinatorStreamStore
 import org.apache.samza.coordinator.server.{HttpServer, JobServlet}
 import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping
 import org.apache.samza.job.model.{ContainerModel, JobModel, TaskMode, TaskModel}
-import org.apache.samza.metadatastore.MetadataStoreFactory
 import org.apache.samza.metrics.{MetricsRegistry, MetricsRegistryMap}
 import org.apache.samza.runtime.LocationId
 import org.apache.samza.system._
@@ -66,10 +65,9 @@ object JobModelManager extends Logging {
    * @param metricsRegistry the registry for reporting metrics.
    * @return the instantiated {@see JobModelManager}.
    */
-  def apply(config: Config, changelogPartitionMapping: util.Map[TaskName, Integer], metricsRegistry: MetricsRegistry = new MetricsRegistryMap()): JobModelManager = {
-    val coordinatorStreamStoreFactory: MetadataStoreFactory = new CoordinatorStreamMetadataStoreFactory()
-    val coordinatorStreamStore: CoordinatorStreamStore = coordinatorStreamStoreFactory.getMetadataStore("", config, metricsRegistry).asInstanceOf[CoordinatorStreamStore]
-    coordinatorStreamStore.init()
+  def apply(config: Config, changelogPartitionMapping: util.Map[TaskName, Integer],
+            coordinatorStreamStore: CoordinatorStreamStore,
+            metricsRegistry: MetricsRegistry = new MetricsRegistryMap()): JobModelManager = {
 
     // Instantiate the respective metadata store util classes which uses the same coordinator metadata store.
     val localityManager = new LocalityManager(coordinatorStreamStore)
