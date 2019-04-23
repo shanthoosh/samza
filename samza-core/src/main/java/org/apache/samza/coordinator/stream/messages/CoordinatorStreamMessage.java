@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * <pre>
- * key =&gt; [1, "set-config", "job.name"] 
+ * key =&gt; [1, "set-config", "job.name"]
  *
  * message =&gt; {
  *   "host": "192.168.0.1",

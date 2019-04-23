@@ -51,6 +51,7 @@ public class CoordinatorStreamValueSerde implements Serde<String> {
   public String fromBytes(byte[] bytes) {
     Map<String, Object> values = messageSerde.fromBytes(bytes);
     CoordinatorStreamMessage message = new CoordinatorStreamMessage(new Object[]{}, values);
+
     if (type.equalsIgnoreCase(SetContainerHostMapping.TYPE)) {
       SetContainerHostMapping hostMapping = new SetContainerHostMapping(message);
       return hostMapping.getHostLocality();

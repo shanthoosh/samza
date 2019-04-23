@@ -54,6 +54,10 @@ public class SetConfig extends CoordinatorStreamMessage {
    * @return the configuration as a string
    */
   public String getConfigValue() {
-    return getMessageValue(CONFIG_VALUE_KEY);
+    if (isDelete()) {
+      return null;
+    } else {
+      return getMessageValue(CONFIG_VALUE_KEY);
+    }
   }
 }

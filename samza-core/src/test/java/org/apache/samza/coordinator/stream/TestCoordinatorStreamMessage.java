@@ -61,6 +61,11 @@ public class TestCoordinatorStreamMessage {
   }
 
   @Test
+  public void testGetConfigValueShouldReturnNullForDeletedConfigs() {
+
+  }
+
+  @Test
   public void testDelete() {
     Delete delete = new Delete("source2", "key", "delete-type");
     assertEquals("delete-type", delete.getType());
