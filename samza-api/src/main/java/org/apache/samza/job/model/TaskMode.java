@@ -18,12 +18,15 @@
  */
 package org.apache.samza.job.model;
 
+import java.io.Serializable;
+
+
 /**
  * This defines the logical mode of a taskInstance.
  * Active is the defacto mode for a task, i.e., tasks processing input, reading/writing state, producing output, etc.
  * Standby is the mode for tasks, that maintain warmed-up KV state by reading from its changelog.
  */
-public enum TaskMode {
+public enum TaskMode implements Serializable {
   Active("Active"), Standby("Standby");
 
   private final String mode;

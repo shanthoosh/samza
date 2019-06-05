@@ -19,6 +19,7 @@
 
 package org.apache.samza.job.model;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,7 +39,7 @@ import org.apache.samza.coordinator.stream.messages.SetContainerHostMapping;
  * an id, partition information, etc.
  * </p>
  */
-public class JobModel {
+public class JobModel implements Serializable {
   private static final String EMPTY_STRING = "";
   private final Config config;
   private final Map<String, ContainerModel> containers;

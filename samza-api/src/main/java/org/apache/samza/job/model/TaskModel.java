@@ -19,6 +19,7 @@
 
 package org.apache.samza.job.model;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.Set;
 import org.apache.samza.Partition;
@@ -31,7 +32,7 @@ import org.apache.samza.system.SystemStreamPartition;
  * <p>
  * The hierarchy for a Samza's job data model is that jobs have containers, and containers have tasks.
  */
-public class TaskModel implements Comparable<TaskModel> {
+public class TaskModel implements Comparable<TaskModel>, Serializable {
   private final TaskName taskName;
   private final Set<SystemStreamPartition> systemStreamPartitions;
   private final Partition changelogPartition;

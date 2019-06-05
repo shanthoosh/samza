@@ -19,10 +19,13 @@
 
 package org.apache.samza;
 
+import java.io.Serializable;
+
+
 /**
  * A numbered, ordered partition of a stream.
  */
-public class Partition implements Comparable<Partition> {
+public class Partition implements Comparable<Partition>, Serializable {
   private final int partition;
 
   /**

@@ -19,6 +19,7 @@
 
 package org.apache.samza.job.model;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.Map;
 import org.apache.samza.container.TaskName;
@@ -28,7 +29,7 @@ import org.apache.samza.container.TaskName;
  * <p>
  * The hierarchy for a Samza's job data model is that jobs have containers, and containers have tasks.
  */
-public class ContainerModel {
+public class ContainerModel implements Serializable {
   private final String id;
   private final Map<TaskName, TaskModel> tasks;
 

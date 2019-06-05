@@ -43,6 +43,7 @@ import org.I0Itec.zkclient.exception.ZkNodeExistsException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.samza.Partition;
 import org.apache.samza.SamzaException;
+import org.apache.samza.config.Config;
 import org.apache.samza.config.MapConfig;
 import org.apache.samza.container.TaskName;
 import org.apache.samza.container.grouper.task.TaskAssignmentManager;
@@ -57,6 +58,7 @@ import org.apache.samza.runtime.LocationId;
 import org.apache.samza.serializers.model.SamzaObjectMapper;
 import org.apache.samza.storage.ChangelogStreamManager;
 import org.apache.samza.system.SystemStreamPartition;
+import org.apache.samza.util.NoOpMetricsRegistry;
 import org.apache.zookeeper.data.Stat;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
@@ -259,26 +261,33 @@ public class ZkUtils {
   /**
    *
    * @param jobModel
-   * @param metadataStore
    */
-  public static void storeJobModel(JobModel jobModel, MetadataStore metadataStore) {
-    String namespace = "test-namespace";
-    TaskPartitionAssignmentManager taskPartitionAssignmentManager = new TaskPartitionAssignmentManager(metadataStore);
-    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(metadataStore, metadataStore);
-    ChangelogStreamManager changelogStreamManager = new ChangelogStreamManager(metadataStore);
+  public static void storeJobModel(JobModel jobModel, Config config, String version) {
+    String zkBaseDir = String.format("%s/%s", "/shared/samza-standalone/test-app-samza-hello-example-write-1", version);
+    ZkMetadataStore taskPartitionMetadataStore = new ZkMetadataStore(String.format("%s/%s", zkBaseDir, "TaskPartitionAssignment"), config, new NoOpMetricsRegistry());
+    ZkMetadataStore taskAssignmentMetadataStore = new ZkMetadataStore(String.format("%s/%s", zkBaseDir, "TaskContainerAssignment"), config, new NoOpMetricsRegistry());
+    ZkMetadataStore changeLogMetadataStore = new ZkMetadataStore(String.format("%s/%s", zkBaseDir, "TaskChangeLogPartition"), config, new NoOpMetricsRegistry());
+    TaskPartitionAssignmentManager taskPartitionAssignmentManager = new TaskPartitionAssignmentManager(taskPartitionMetadataStore);
+    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(taskAssignmentMetadataStore, taskAssignmentMetadataStore);
+    ChangelogStreamManager changelogStreamManager = new ChangelogStreamManager(changeLogMetadataStore);
 
-    Map<TaskName, Integer> changelogEntries = new HashMap<>();
-    jobModel.getContainers().forEach((containerId, containerModel) -> {
-      containerModel.getTasks().forEach((taskName, taskModel) -> {
-        taskModel.getSystemStreamPartitions().forEach(systemStreamPartition -> {
-          taskPartitionAssignmentManager.writeTaskPartitionAssignment(systemStreamPartition, ImmutableList.of(taskName.getTaskName()));
-          changelogEntries.put(taskName, taskModel.getChangelogPartition().getPartitionId());
+    try {
+      Map<TaskName, Integer> changelogEntries = new HashMap<>();
+      jobModel.getContainers().forEach((containerId, containerModel) -> {
+        containerModel.getTasks().forEach((taskName, taskModel) -> {
+          taskModel.getSystemStreamPartitions().forEach(systemStreamPartition -> {
+            taskPartitionAssignmentManager.writeTaskPartitionAssignment(systemStreamPartition, ImmutableList.of(taskName.getTaskName()));
+            changelogEntries.put(taskName, taskModel.getChangelogPartition().getPartitionId());
           });
-        taskAssignmentManager.writeTaskContainerMapping(taskName.getTaskName(), containerId, TaskMode.Active);
+          taskAssignmentManager.writeTaskContainerMapping(taskName.getTaskName(), containerId, TaskMode.Active);
         });
       });
-    changelogStreamManager.writePartitionMapping(changelogEntries);
-    metadataStore.put(namespace + "final-write", "DONE".getBytes());
+      changelogStreamManager.writePartitionMapping(changelogEntries);
+    } finally {
+      taskAssignmentMetadataStore.close();
+      taskPartitionMetadataStore.close();
+      changeLogMetadataStore.close();
+    }
   }
 
   /**
@@ -286,50 +295,60 @@ public class ZkUtils {
    * @param metadataStore
    * @return
    */
-  public static JobModel readJobModel(MetadataStore metadataStore) {
-    TaskPartitionAssignmentManager taskPartitionAssignmentManager = new TaskPartitionAssignmentManager(metadataStore);
-    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(metadataStore, metadataStore);
-    ChangelogStreamManager changelogStreamManager = new ChangelogStreamManager(metadataStore);
+  public static JobModel readJobModel(MetadataStore metadataStore, Config config) {
+    String zkBaseDir = "/shared/samza-standalone/test-app-samza-hello-example";
+    ZkMetadataStore taskPartitionMetadataStore = new ZkMetadataStore(String.format("%s/%s/", zkBaseDir, "TaskPartitionAssignment"), config, new NoOpMetricsRegistry());
+    ZkMetadataStore taskAssignmentMetadataStore = new ZkMetadataStore(String.format("%s/%s/", zkBaseDir, "TaskContainerAssignment"), config, new NoOpMetricsRegistry());
+    ZkMetadataStore changeLogMetadataStore = new ZkMetadataStore(String.format("%s/%s/", zkBaseDir, "TaskChangeLogPartition"), config, new NoOpMetricsRegistry());
+    TaskPartitionAssignmentManager taskPartitionAssignmentManager = new TaskPartitionAssignmentManager(taskPartitionMetadataStore);
+    TaskAssignmentManager taskAssignmentManager = new TaskAssignmentManager(taskAssignmentMetadataStore, taskAssignmentMetadataStore);
+    ChangelogStreamManager changelogStreamManager = new ChangelogStreamManager(changeLogMetadataStore);
 
-    Map<String, String> taskNameToContainerId = taskAssignmentManager.readTaskAssignment();
-    Map<SystemStreamPartition, List<String>> sspToTaskNames = taskPartitionAssignmentManager.readTaskPartitionAssignments();
-    Map<TaskName, Integer> taskNameToChangelogPartition = changelogStreamManager.readPartitionMapping();
+    try {
+      Map<String, String> taskNameToContainerId = taskAssignmentManager.readTaskAssignment();
+      Map<SystemStreamPartition, List<String>> sspToTaskNames = taskPartitionAssignmentManager.readTaskPartitionAssignments();
+      Map<TaskName, Integer> taskNameToChangelogPartition = changelogStreamManager.readPartitionMapping();
 
-    Map<TaskName, Set<SystemStreamPartition>> taskToPartitions = new HashMap<>();
-    sspToTaskNames.forEach((ssp, taskNames) -> {
-      taskNames.forEach(task -> {
-        TaskName taskName = new TaskName(task);
-        if (!taskToPartitions.containsKey(taskName)) {
-          taskToPartitions.put(taskName, new HashSet<>());
-        }
-        taskToPartitions.get(taskName).add(ssp);
+      Map<TaskName, Set<SystemStreamPartition>> taskToPartitions = new HashMap<>();
+      sspToTaskNames.forEach((ssp, taskNames) -> {
+        taskNames.forEach(task -> {
+          TaskName taskName = new TaskName(task);
+          if (!taskToPartitions.containsKey(taskName)) {
+            taskToPartitions.put(taskName, new HashSet<>());
+          }
+          taskToPartitions.get(taskName).add(ssp);
         });
       });
 
-    Map<String, Set<TaskName>> containerIdToTaskNames = new HashMap<>();
-    taskNameToContainerId.forEach((taskName, containerId) -> {
-      containerIdToTaskNames.putIfAbsent(containerId, new HashSet<>());
-      containerIdToTaskNames.get(containerId).add(new TaskName(taskName));
+      Map<String, Set<TaskName>> containerIdToTaskNames = new HashMap<>();
+      taskNameToContainerId.forEach((taskName, containerId) -> {
+        containerIdToTaskNames.putIfAbsent(containerId, new HashSet<>());
+        containerIdToTaskNames.get(containerId).add(new TaskName(taskName));
       });
 
-    final Map<TaskName, TaskModel> taskModelMap = new HashMap<>();
-    taskToPartitions.forEach((taskName, partitions) -> {
-      int changelogPartition = taskNameToChangelogPartition.get(taskName);
-      TaskModel taskModel = new TaskModel(taskName, partitions, new Partition(changelogPartition));
-      taskModelMap.put(taskName, taskModel);
+      final Map<TaskName, TaskModel> taskModelMap = new HashMap<>();
+      taskToPartitions.forEach((taskName, partitions) -> {
+        int changelogPartition = taskNameToChangelogPartition.get(taskName);
+        TaskModel taskModel = new TaskModel(taskName, partitions, new Partition(changelogPartition));
+        taskModelMap.put(taskName, taskModel);
       });
 
-    Map<String, ContainerModel> containerModelMap = new HashMap<>();
-    containerIdToTaskNames.forEach((containerId, taskNames) -> {
-      Map<TaskName, TaskModel> taskModelMapForContainer = new HashMap<>();
-      taskNames.forEach(taskName -> {
-        taskModelMapForContainer.put(taskName, taskModelMap.get(taskName));
+      Map<String, ContainerModel> containerModelMap = new HashMap<>();
+      containerIdToTaskNames.forEach((containerId, taskNames) -> {
+        Map<TaskName, TaskModel> taskModelMapForContainer = new HashMap<>();
+        taskNames.forEach(taskName -> {
+          taskModelMapForContainer.put(taskName, taskModelMap.get(taskName));
         });
-      ContainerModel containerModel = new ContainerModel(containerId, taskModelMapForContainer);
-      containerModelMap.put(containerId, containerModel);
+        ContainerModel containerModel = new ContainerModel(containerId, taskModelMapForContainer);
+        containerModelMap.put(containerId, containerModel);
       });
 
-    return new JobModel(new MapConfig(), containerModelMap);
+      return new JobModel(new MapConfig(), containerModelMap);
+    } finally {
+      taskAssignmentMetadataStore.close();
+      taskPartitionMetadataStore.close();
+      changeLogMetadataStore.close();
+    }
   }
 
 

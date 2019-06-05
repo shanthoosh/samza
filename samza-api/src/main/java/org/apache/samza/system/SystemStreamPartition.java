@@ -19,12 +19,13 @@
 
 package org.apache.samza.system;
 
+import java.io.Serializable;
 import org.apache.samza.Partition;
 
 /**
  * Aggregate object representing a both the {@link org.apache.samza.system.SystemStream} and {@link org.apache.samza.Partition}.
  */
-public class SystemStreamPartition extends SystemStream implements Comparable<SystemStreamPartition> {
+public class SystemStreamPartition extends SystemStream implements Comparable<SystemStreamPartition>, Serializable {
   protected final Partition partition;
   protected final int hash;  // precomputed as instances are immutable and often stored in hash-addressed data structures
 

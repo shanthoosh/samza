@@ -18,6 +18,9 @@
  */
 package org.apache.samza.container;
 
+import java.io.Serializable;
+
+
 /**
  * A unique identifier of a set of a SystemStreamPartitions that have been grouped by
  * a {@link org.apache.samza.container.grouper.stream.SystemStreamPartitionGrouper}.  The
@@ -25,7 +28,7 @@ package org.apache.samza.container;
  * should only contain the taskName. This is necessary because the ChangelogManager assumes that the taskName is
  * unique enough to identify this class, and uses it to store it in the underlying coordinator stream (as a key).
  */
-public class TaskName implements Comparable<TaskName> {
+public class TaskName implements Comparable<TaskName>, Serializable {
   private final String taskName;
 
   public String getTaskName() {
