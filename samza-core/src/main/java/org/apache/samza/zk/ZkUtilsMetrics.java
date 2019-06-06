@@ -18,17 +18,21 @@
  */
 package org.apache.samza.zk;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.google.common.io.Files;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.lang.instrument.Instrumentation;
+import java.io.ObjectInputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import junit.framework.Assert;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.samza.Partition;
 import org.apache.samza.config.MapConfig;
 import org.apache.samza.container.TaskName;
@@ -39,6 +43,7 @@ import org.apache.samza.metrics.Counter;
 import org.apache.samza.metrics.MetricsBase;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.system.SystemStreamPartition;
+import org.apache.samza.util.NoOpMetricsRegistry;
 
 
 /**
@@ -79,14 +84,59 @@ public class ZkUtilsMetrics extends MetricsBase {
     this.zkConnectionError = newCounter("zk-connection-errors");
   }
 
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws Exception {
+//    splitApproach1();
+    splitApproach2();
+  }
+
+
+  private static void splitApproach2() throws Exception {
+    File file = new File("/tmp/latency-1.txt");
+    Map<String, String> configMap = new HashMap<>();
+    configMap.put("job.coordinator.zk.connect", "localhost:2181");
+    MapConfig config = new MapConfig(configMap);
+
+    Map<String, ZkMetadataStore> zkMetadataStoreMap = new HashMap<>();
+    for (int partitionCountPerContainer = 100; partitionCountPerContainer <= 6000; partitionCountPerContainer += 100) {
+      List<Long> latencyList = new ArrayList<>();
+      long totalTestRuns = 10;
+      long objectSize = 0;
+      for (int testRun = 1; testRun <= totalTestRuns; ++testRun) {
+        long startTime = System.currentTimeMillis();
+        JobModel jobModel = generateTestJobModel(partitionCountPerContainer, 10);
+        String zkBaseDir = String.format("%s/%s", "/shared/samza-standalone/test-app-samza-hello-example-write-4", testRun);
+        if (!zkMetadataStoreMap.containsKey(zkBaseDir)) {
+          ZkMetadataStore metadataStore = new ZkMetadataStore(String.format("%s/%s", zkBaseDir, "split-approach-4"), config, new NoOpMetricsRegistry());
+          metadataStore.init();
+          zkMetadataStoreMap.put(zkBaseDir, metadataStore);
+        }
+        ZkMetadataStore zkMetadataStore = zkMetadataStoreMap.get(zkBaseDir);
+        ZkUtils.storeJobModelAsByteArrays(jobModel, zkMetadataStore);
+
+        long endTime = System.currentTimeMillis();
+        objectSize = ObjectSizeFetcher.getObjectSize(jobModel);
+        latencyList.add((endTime - startTime + 1));
+        Thread.sleep(1000);
+      }
+      long totalLatencySum = 0;
+      for (Long latency : latencyList) {
+        totalLatencySum += latency;
+      }
+      System.out.println("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns) + " milliseconds");
+
+      Files.append("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns) + " milliseconds\n", file, Charset
+          .defaultCharset());
+    }
+  }
+
+  private static void splitApproach1() throws IOException {
     Map<String, String> configMap = new HashMap<>();
 //    configMap.put("job.coordinator.zk.connect", "zk-ltx1-shared.stg.linkedin.com:12913");
 
     File file = new File("/tmp/latency.txt");
     configMap.put("job.coordinator.zk.connect", "localhost:2181");
     MapConfig config = new MapConfig(configMap);
-    for (int partitionCountPerContainer = 100; partitionCountPerContainer <= 1500; partitionCountPerContainer += 100) {
+    for (int partitionCountPerContainer = 100; partitionCountPerContainer <= 6000; partitionCountPerContainer += 100) {
       List<Long> latencyList = new ArrayList<>();
       long totalTestRuns = 10;
       long objectSize = 0;
@@ -106,7 +156,8 @@ public class ZkUtilsMetrics extends MetricsBase {
       }
       System.out.println("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns * 1000) + " seconds");
 
-      Files.append("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns * 1000) + " seconds\n", file, Charset.defaultCharset());
+      Files.append("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns * 1000) + " seconds\n", file, Charset
+          .defaultCharset());
     }
   }
 

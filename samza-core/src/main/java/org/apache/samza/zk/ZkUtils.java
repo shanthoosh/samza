@@ -20,8 +20,13 @@
 package org.apache.samza.zk;
 
 import com.google.common.collect.ImmutableList;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -40,6 +45,7 @@ import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.exception.ZkBadVersionException;
 import org.I0Itec.zkclient.exception.ZkInterruptedException;
 import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.samza.Partition;
 import org.apache.samza.SamzaException;
@@ -256,6 +262,48 @@ public class ZkUtils {
       }
     }
     return processorNodes;
+  }
+
+  public static List<byte[]> convertJobModelToByteArrayList(JobModel jobModel) throws IOException {
+    try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+      ObjectOutputStream oos = new ObjectOutputStream(baos);
+      oos.writeObject(jobModel);
+      byte[] bytes = baos.toByteArray();
+      final int maxJobModelSize = 1020 * 1020;
+      List<byte[]> byteArrayList = new ArrayList<>();
+      for (int byteIndex = 0; byteIndex < bytes.length;) {
+        byte[] range = Arrays.copyOfRange(bytes, byteIndex, Math.min(byteIndex + maxJobModelSize, bytes.length));
+        byteArrayList.add(range);
+        byteIndex += maxJobModelSize;
+      }
+      return byteArrayList;
+    }
+  }
+
+  public void storeJobModelAsByteArrays(JobModel jobModel, String jobModelPath) throws IOException {
+    List<byte[]> byteArrayList = convertJobModelToByteArrayList(jobModel);
+    for (int byteArrayIndex = 0; byteArrayIndex < byteArrayList.size(); byteArrayIndex += 1) {
+      byte[] value = byteArrayList.get(byteArrayIndex);
+      String key = String.format("%s/%d", jobModelPath, byteArrayIndex);
+      zkClient.writeData(key, value);
+    }
+  }
+
+  public JobModel readJobModel(String zkBasePath) throws Exception {
+    List<String> childZkNodes = zkClient.getChildren(zkBasePath);
+    List<byte[]> bytes = new ArrayList<>();
+    for (String childZkNode : childZkNodes) {
+      String completeZkPath = String.format("%s/%s", zkBasePath, childZkNode);
+      byte[] value = zkClient.readData(completeZkPath);
+      bytes.add(value);
+    }
+    byte[] combinedByteArray = bytes.get(0);
+    for (int i=1;i<bytes.size();++i) {
+      combinedByteArray = ArrayUtils.addAll(combinedByteArray, bytes.get(i));
+    }
+    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(combinedByteArray);
+    ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);
+    return  (JobModel) objectInputStream.readObject();
   }
 
   /**
