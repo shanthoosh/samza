@@ -18,33 +18,9 @@
  */
 package org.apache.samza.zk;
 
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
-import com.google.common.io.Files;
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import junit.framework.Assert;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.samza.Partition;
-import org.apache.samza.config.MapConfig;
-import org.apache.samza.container.TaskName;
-import org.apache.samza.job.model.ContainerModel;
-import org.apache.samza.job.model.JobModel;
-import org.apache.samza.job.model.TaskModel;
 import org.apache.samza.metrics.Counter;
 import org.apache.samza.metrics.MetricsBase;
 import org.apache.samza.metrics.MetricsRegistry;
-import org.apache.samza.system.SystemStreamPartition;
-import org.apache.samza.util.NoOpMetricsRegistry;
-
 
 /**
  * Contains all the metrics published by {@link ZkUtils}.
@@ -82,98 +58,5 @@ public class ZkUtilsMetrics extends MetricsBase {
     this.deletions = newCounter("deletions");
     this.subscriptions = newCounter("subscriptions");
     this.zkConnectionError = newCounter("zk-connection-errors");
-  }
-
-  public static void main(String[] args) throws Exception {
-//    splitApproach1();
-    splitApproach2();
-  }
-
-
-  private static void splitApproach2() throws Exception {
-    File file = new File("/tmp/latency-1.txt");
-    Map<String, String> configMap = new HashMap<>();
-    configMap.put("job.coordinator.zk.connect", "localhost:2181");
-    MapConfig config = new MapConfig(configMap);
-
-    Map<String, ZkMetadataStore> zkMetadataStoreMap = new HashMap<>();
-    for (int partitionCountPerContainer = 100; partitionCountPerContainer <= 6000; partitionCountPerContainer += 100) {
-      List<Long> latencyList = new ArrayList<>();
-      long totalTestRuns = 10;
-      long objectSize = 0;
-      for (int testRun = 1; testRun <= totalTestRuns; ++testRun) {
-        long startTime = System.currentTimeMillis();
-        JobModel jobModel = generateTestJobModel(partitionCountPerContainer, 10);
-        String zkBaseDir = String.format("%s/%s", "/shared/samza-standalone/test-app-samza-hello-example-write-4", testRun);
-        if (!zkMetadataStoreMap.containsKey(zkBaseDir)) {
-          ZkMetadataStore metadataStore = new ZkMetadataStore(String.format("%s/%s", zkBaseDir, "split-approach-4"), config, new NoOpMetricsRegistry());
-          metadataStore.init();
-          zkMetadataStoreMap.put(zkBaseDir, metadataStore);
-        }
-        ZkMetadataStore zkMetadataStore = zkMetadataStoreMap.get(zkBaseDir);
-        ZkUtils.storeJobModelAsByteArrays(jobModel, zkMetadataStore);
-
-        long endTime = System.currentTimeMillis();
-        objectSize = ObjectSizeFetcher.getObjectSize(jobModel);
-        latencyList.add((endTime - startTime + 1));
-        Thread.sleep(1000);
-      }
-      long totalLatencySum = 0;
-      for (Long latency : latencyList) {
-        totalLatencySum += latency;
-      }
-      System.out.println("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns) + " milliseconds");
-
-      Files.append("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns) + " milliseconds\n", file, Charset
-          .defaultCharset());
-    }
-  }
-
-  private static void splitApproach1() throws IOException {
-    Map<String, String> configMap = new HashMap<>();
-//    configMap.put("job.coordinator.zk.connect", "zk-ltx1-shared.stg.linkedin.com:12913");
-
-    File file = new File("/tmp/latency.txt");
-    configMap.put("job.coordinator.zk.connect", "localhost:2181");
-    MapConfig config = new MapConfig(configMap);
-    for (int partitionCountPerContainer = 100; partitionCountPerContainer <= 6000; partitionCountPerContainer += 100) {
-      List<Long> latencyList = new ArrayList<>();
-      long totalTestRuns = 10;
-      long objectSize = 0;
-      for (int testRun = 1; testRun <= totalTestRuns; ++testRun) {
-        long startTime = System.currentTimeMillis();
-        JobModel jobModel = generateTestJobModel(partitionCountPerContainer, 10);
-        System.out.println("Generated the JobModel. Writing it to zookeeper");
-        ZkUtils.storeJobModel(jobModel, config, String.valueOf(testRun));
-
-        long endTime = System.currentTimeMillis();
-        objectSize = ObjectSizeFetcher.getObjectSize(jobModel);
-        latencyList.add((endTime - startTime + 1));
-      }
-      long totalLatencySum = 0;
-      for (Long latency : latencyList) {
-        totalLatencySum += latency;
-      }
-      System.out.println("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns * 1000) + " seconds");
-
-      Files.append("PartitionCount: " + partitionCountPerContainer + " Object size: " + objectSize + " Avg time: " + (totalLatencySum) / (totalTestRuns * 1000) + " seconds\n", file, Charset
-          .defaultCharset());
-    }
-  }
-
-  static JobModel generateTestJobModel(int partitionPerContainer, int containerCount) {
-    Map<String, ContainerModel> containerModelMap = new HashMap<>();
-    int globalPartitionCounter = 0;
-    for (int container = 1; container <= containerCount; ++container) {
-      Map<TaskName, TaskModel> taskModelMap = new HashMap<>();
-      for (int partition=1; partition <= partitionPerContainer; ++partition) {
-        TaskName taskName = new TaskName("Task " + (partition + globalPartitionCounter));
-        SystemStreamPartition systemStreamPartition = new SystemStreamPartition("test-system", "test-stream", new Partition(partition + globalPartitionCounter));
-        taskModelMap.put(taskName, new TaskModel(taskName, ImmutableSet.of(systemStreamPartition), new Partition(partition + globalPartitionCounter)));
-      }
-      globalPartitionCounter += partitionPerContainer;
-      containerModelMap.put(String.valueOf(container), new ContainerModel(String.valueOf(container), taskModelMap));
-    }
-    return new JobModel(new MapConfig(), containerModelMap);
   }
 }
