@@ -19,7 +19,9 @@
 
 package org.apache.samza.sql.impl;
 
+import com.google.common.collect.Maps;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.samza.SamzaException;
 import org.apache.samza.config.Config;
+import org.apache.samza.config.MapConfig;
 import org.apache.samza.sql.interfaces.UdfMetadata;
 import org.apache.samza.sql.interfaces.UdfResolver;
 import org.apache.samza.sql.schema.SamzaSqlFieldType;
@@ -53,13 +56,22 @@ public class ConfigBasedUdfResolver implements UdfResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ConfigBasedUdfResolver.class);
   public static final String CFG_UDF_CLASSES = "udfClasses";
 
-  private final ArrayList<UdfMetadata> udfs;
+  private final List<UdfMetadata> udfs;
 
   public ConfigBasedUdfResolver(Properties config, Config udfConfig) {
-    List<String> udfClasses = Arrays.stream(config.getProperty(CFG_UDF_CLASSES, "").split(","))
+    udfs = extractUdfs(new MapConfig(Maps.fromProperties(config)), udfConfig, CFG_UDF_CLASSES);
+  }
+
+  @Override
+  public Collection<UdfMetadata> getUdfs() {
+    return udfs;
+  }
+
+  public static List<UdfMetadata> extractUdfs(Config config, Config udfConfig, String udfConfigKey) {
+    List<String> udfClasses = Arrays.stream(config.get(udfConfigKey, "").split(","))
         .filter(StringUtils::isNotBlank)
         .collect(Collectors.toList());
-    udfs = new ArrayList<>();
+    List<UdfMetadata> udfs = new ArrayList<>();
     Class<?> udfClass;
     for (String udfClassName : udfClasses) {
       try {
@@ -105,15 +117,11 @@ public class ConfigBasedUdfResolver implements UdfResolver {
         String udfName = sqlUdf.name();
         for (Map.Entry<SamzaSqlUdfMethod, Method> udfMethod : udfMethods.entrySet()) {
           List<SamzaSqlFieldType> params = Arrays.asList(udfMethod.getKey().params());
-          udfs.add(new UdfMetadata(udfName, sqlUdf.description(), udfMethod.getValue(), udfConfig.subset(udfName + "."), params,
-              udfMethod.getKey().returns(), udfMethod.getKey().disableArgumentCheck()));
+          udfs.add(new UdfMetadata(udfName, sqlUdf.description(), udfMethod.getValue(), udfConfig.subset(udfName + "."),
+              params, udfMethod.getKey().returns(), udfMethod.getKey().disableArgumentCheck()));
         }
       }
     }
-  }
-
-  @Override
-  public Collection<UdfMetadata> getUdfs() {
     return udfs;
   }
 }

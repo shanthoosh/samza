@@ -21,8 +21,11 @@ package org.apache.samza.sql.udf.impl;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.MapConfig;
+import org.apache.samza.sql.fn.FlattenUdf;
 import org.apache.samza.sql.interfaces.UdfMetadata;
 import org.apache.samza.sql.schema.SamzaSqlFieldType;
 import org.apache.samza.sql.udf.ReflectionBasedUdfResolver;
@@ -55,5 +58,22 @@ public class TestReflectionBasedUdfResolver {
                SamzaSqlFieldType.STRING, true);
 
     Assert.assertArrayEquals(new UdfMetadata[]{udfMetadata}, udfMetadataList.toArray(new UdfMetadata[0]));
+  }
+
+  @Test
+  public void testUdfResolverShouldReturnUdfClassDefinedInConfig() throws Exception {
+    Config config = new MapConfig(ImmutableMap.of("samza.sql.udf.resolver.classes",
+        "org.apache.samza.sql.fn.FlattenUdf", "samza.sql.udf.resolver.disable", "true"));
+
+    ReflectionBasedUdfResolver reflectionBasedUdfResolver = new ReflectionBasedUdfResolver(config);
+    List<UdfMetadata> udfs = new ArrayList<>(reflectionBasedUdfResolver.getUdfs());
+
+    Method method = FlattenUdf.class.getMethod("execute", List.class);
+    UdfMetadata udfMetadata = new UdfMetadata("Flatten",
+        "Flattens the array.", method, new MapConfig(), ImmutableList.of(SamzaSqlFieldType.ARRAY),
+        SamzaSqlFieldType.ANY, true);
+
+    Assert.assertEquals(1, udfs.size());
+    Assert.assertEquals(udfMetadata, udfs.get(0));
   }
 }

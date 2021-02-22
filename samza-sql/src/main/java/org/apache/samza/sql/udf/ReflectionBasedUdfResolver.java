@@ -27,9 +27,11 @@ import java.util.List;
 import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.reflect.MethodUtils;
 import org.apache.samza.SamzaException;
 import org.apache.samza.config.Config;
+import org.apache.samza.sql.impl.ConfigBasedUdfResolver;
 import org.apache.samza.sql.interfaces.UdfMetadata;
 import org.apache.samza.sql.interfaces.UdfResolver;
 import org.apache.samza.sql.schema.SamzaSqlFieldType;
@@ -56,6 +58,8 @@ public class ReflectionBasedUdfResolver implements UdfResolver {
   private static final String CONFIG_PACKAGE_PREFIX = "samza.sql.udf.resolver.package.prefix";
   private static final String CONFIG_PACKAGE_FILTER = "samza.sql.udf.resolver.package.filter";
   private static final String CONFIG_RESOURCE_URLS = "samza.sql.udf.resolver.urls";
+  private static final String CONFIG_PACKAGE_RESOURCE_CLASSES = "samza.sql.udf.resolver.classes";
+  private static final String CONFIG_DISABLE_REFLECTION_RESOLVER = "samza.sql.udf.resolver.disable";
 
   private final Set<UdfMetadata> udfs  = new HashSet<>();
 
@@ -80,26 +84,36 @@ public class ReflectionBasedUdfResolver implements UdfResolver {
     Set<Class<?>> typesAnnotatedWithSamzaSqlUdf = reflections.getTypesAnnotatedWith(SamzaSqlUdf.class);
 
     for (Class<?> udfClass : typesAnnotatedWithSamzaSqlUdf) {
-      // 3. Get all the methods that are annotated with SamzaSqlUdfMethod
-      List<Method> methodsAnnotatedWithSamzaSqlMethod = MethodUtils.getMethodsListWithAnnotation(udfClass, SamzaSqlUdfMethod.class);
+      try {
+        // 3. Get all the methods that are annotated with SamzaSqlUdfMethod
+        List<Method> methodsAnnotatedWithSamzaSqlMethod = MethodUtils.getMethodsListWithAnnotation(udfClass, SamzaSqlUdfMethod.class);
 
-      if (methodsAnnotatedWithSamzaSqlMethod.isEmpty()) {
-        String msg = String.format("Udf class: %s doesn't have any methods annotated with: %s", udfClass.getName(), SamzaSqlUdfMethod.class.getName());
-        LOG.error(msg);
-        throw new SamzaException(msg);
-      }
+        if (methodsAnnotatedWithSamzaSqlMethod.isEmpty()) {
+          String msg = String.format("Udf class: %s doesn't have any methods annotated with: %s", udfClass.getName(), SamzaSqlUdfMethod.class.getName());
+          LOG.error(msg);
+          throw new SamzaException(msg);
+        }
 
-      SamzaSqlUdf sqlUdf = udfClass.getAnnotation(SamzaSqlUdf.class);
-      // 4. If the udf is enabled, then add the udf information of the methods to the udfs list.
-      if (sqlUdf.enabled()) {
-        String udfName = sqlUdf.name();
-        methodsAnnotatedWithSamzaSqlMethod.forEach(method -> {
-          SamzaSqlUdfMethod samzaSqlUdfMethod = method.getAnnotation(SamzaSqlUdfMethod.class);
-          List<SamzaSqlFieldType> params = Arrays.asList(samzaSqlUdfMethod.params());
-          udfs.add(new UdfMetadata(udfName, sqlUdf.description(), method, udfConfig.subset(udfName + "."), params,
+        SamzaSqlUdf sqlUdf = udfClass.getAnnotation(SamzaSqlUdf.class);
+        // 4. If the udf is enabled, then add the udf information of the methods to the udfs list.
+        if (sqlUdf.enabled()) {
+          String udfName = sqlUdf.name();
+          methodsAnnotatedWithSamzaSqlMethod.forEach(method -> {
+            SamzaSqlUdfMethod samzaSqlUdfMethod = method.getAnnotation(SamzaSqlUdfMethod.class);
+            List<SamzaSqlFieldType> params = Arrays.asList(samzaSqlUdfMethod.params());
+            if (!udfConfig.getBoolean(CONFIG_DISABLE_REFLECTION_RESOLVER, false)) {
+              udfs.add(new UdfMetadata(udfName, sqlUdf.description(), method, udfConfig.subset(udfName + "."), params,
                   samzaSqlUdfMethod.returns(), samzaSqlUdfMethod.disableArgumentCheck()));
-        });
+            }
+          });
+        }
+      } catch (Exception e) {
+        LOG.error("Exception occurred with discovering methods in udf class: {}", udfClass, e);
       }
+    }
+
+    if (StringUtils.isNotBlank(udfConfig.get(CONFIG_PACKAGE_RESOURCE_CLASSES))) {
+      udfs.addAll(ConfigBasedUdfResolver.extractUdfs(udfConfig, udfConfig, CONFIG_PACKAGE_RESOURCE_CLASSES));
     }
   }
 
